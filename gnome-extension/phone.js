@@ -14,8 +14,9 @@ const GSCONNECT_APP = 'org.gnome.Shell.Extensions.GSConnect.desktop';
 // Without KDE Connect's telephony permission (or on phones that don't
 // send call events) a call still arrives as a mirror of the phone's
 // in-call notification. Android notification keys contain the package.
-const DIALER = /incallui|dialer|telecom|com\.android\.phone/i;
+const DIALER = /incallui|dialer|telecom|com\.android\.phone|com\.miui\.phone|com\.android\.server\.telecom|com\.google\.android\.dialer/i;
 const RINGING = /incoming|ringing|calling|تماس ورودی|درحال تماس|در حال تماس|زنگ/i;
+const MUTE_ACTION = /^mute$|ساکت|بی‌صدا|بی صدا/i;
 
 // GTK notification sources keep their app in _app, FDO ones in app.
 export function sourceApp(source) {
@@ -39,6 +40,11 @@ function deviceTarget(n) {
     }
 }
 
+function hasMuteAction(n) {
+    return (n?.actions ?? []).some(a =>
+        a.name === 'muteCall' || MUTE_ACTION.test(a.label ?? ''));
+}
+
 // 'call' | 'ongoing' | 'missed' | 'message' | 'sms' | 'phone' | null
 export function phoneKind(n) {
     if (!isPhoneNotification(n))
@@ -48,12 +54,22 @@ export function phoneKind(n) {
         return 'call';
     if (id.startsWith('talking|'))
         return 'ongoing';
+    // GSConnect telephony always attaches a Mute button while ringing.
+    if (hasMuteAction(n))
+        return 'call';
     if (id.includes('MissedCall'))
         return 'missed';
     if (DIALER.test(id)) {
         if (n.actions.some(a => /call back|message|تماس مجدد|پیام/i.test(a.label)))
             return 'missed';
-        return RINGING.test(`${n.title} ${n.body}`) ? 'call' : 'ongoing';
+        // Prefer call when the body hints at ringing; otherwise still treat
+        // a live dialer mirror as ringing rather than a silent ongoing banner
+        // when actions look like an incoming call (Answer / Decline / Mute).
+        if (RINGING.test(`${n.title} ${n.body}`))
+            return 'call';
+        if (n.actions.some(a => /answer|decline|reject|accept|پاسخ|رد|قطع/i.test(a.label)))
+            return 'call';
+        return 'ongoing';
     }
     const target = deviceTarget(n);
     if (target?.action === 'replyNotification')
@@ -61,6 +77,11 @@ export function phoneKind(n) {
     if (target?.action === 'replySms')
         return 'sms';
     return 'phone';
+}
+
+// Generic mirrored app alerts (YouTube, Reddit…) — not calls/SMS/messages.
+export function isGenericPhoneMirror(n) {
+    return phoneKind(n) === 'phone';
 }
 
 // Caller and status line. Mirrored notifications come as

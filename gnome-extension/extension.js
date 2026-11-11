@@ -22,6 +22,7 @@ import {
 
 export default class LinuxIslandExtension extends Extension {
     enable() {
+        console.log(`linux-island: enable v${this.metadata.version ?? '?'}`);
         this._settings = this.getSettings();
         this._art = new ArtLoader();
         this._mpris = new MprisWatcher();

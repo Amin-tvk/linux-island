@@ -16,17 +16,26 @@ export class OsdRedirect extends EventEmitter {
         const self = this;
         const proto = Object.getPrototypeOf(manager);
         this._manager = manager;
-        manager._showOsdWindow = function (monitorIndex, icon, label, level, maxLevel) {
+        this._proto = proto;
+        this._orig = manager._showOsdWindow ?? proto._showOsdWindow;
+        const redirect = function (monitorIndex, icon, label, level, maxLevel) {
             if (isEnabled() && monitorIndex === Main.layoutManager.primaryIndex) {
                 self.emit('osd', {icon, label, level, maxLevel});
                 return;
             }
-            proto._showOsdWindow.call(this, monitorIndex, icon, label, level, maxLevel);
+            self._orig.call(this, monitorIndex, icon, label, level, maxLevel);
         };
+        // Patch both so another extension that only replaces one still loses
+        // to us when we own the active path, and destroy can restore cleanly.
+        manager._showOsdWindow = redirect;
+        proto._showOsdWindow = redirect;
     }
 
     destroy() {
-        delete this._manager._showOsdWindow;
+        if (this._manager._showOsdWindow)
+            this._manager._showOsdWindow = this._orig.bind(this._manager);
+        if (this._proto._showOsdWindow)
+            this._proto._showOsdWindow = this._orig;
         this.disconnectAll();
     }
 }

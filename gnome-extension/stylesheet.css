@@ -26,6 +26,8 @@
 .li-cover-btn { border-radius: 1em; }
 
 .li-mini-title { font-size: 0.96em; font-weight: 600; }
+.li-mini-phone { spacing: 0.25em; }
+.li-mini-phone-pct { font-size: 0.82em; font-weight: 600; opacity: 0.9; }
 .li-title { font-size: 1.15em; font-weight: 700; }
 .li-artist { font-size: 0.96em; color: rgba(255, 255, 255, 0.65); }
 .li-source { padding: 0.15em 0; border-radius: 0.46em; color: rgba(255, 255, 255, 0.45); }

@@ -15,7 +15,7 @@ import * as MessageTray from 'resource:///org/gnome/shell/ui/messageTray.js';
 import {DEFAULT_ACCENT} from './art.js';
 import {changeVolume} from './system.js';
 import {Aura} from './visualizer.js';
-import {callInfo, canReplyViaPhone, idShape, phoneKind, replyViaPhone, sourceApp} from './phone.js';
+import {callInfo, canReplyViaPhone, idShape, isGenericPhoneMirror, phoneKind, replyViaPhone, sourceApp} from './phone.js';
 import {formatNumber} from './telephony.js';
 import {formatTime, formatUs} from './timer.js';
 
@@ -24,7 +24,7 @@ const SIZES = {
     'idle': [120, 10],
     'idle-open': [380, 150],
     'live': [220, 34],
-    'media': [300, 36],
+    'media': [340, 36],
     'media-open': [420, 172],
     'notification': [420, 78],
     'notification-open': [420, 170],
@@ -607,9 +607,22 @@ class Island extends St.Widget {
         this._miniEq = new Equalizer(this._px(14), this._px(3));
         this._miniTimer = label('', 'li-timer-small');
         this._miniTimer.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
+        this._miniPhone = new St.BoxLayout({
+            style_class: 'li-mini-phone',
+            y_align: Clutter.ActorAlign.CENTER,
+            visible: false,
+        });
+        this._miniPhoneIcon = this._icon('phone-symbolic', 12, 'li-dim-icon');
+        this._miniPhoneLabel = label('', 'li-mini-phone-pct');
+        this._miniPhoneLabel.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
+        this._miniPhoneCharge = this._icon('battery-full-charging-symbolic', 11, 'li-battery-ok');
+        this._miniPhone.add_child(this._miniPhoneIcon);
+        this._miniPhone.add_child(this._miniPhoneLabel);
+        this._miniPhone.add_child(this._miniPhoneCharge);
         box.add_child(this._miniCover);
         box.add_child(this._miniTitle);
         box.add_child(this._miniTimer);
+        box.add_child(this._miniPhone);
         box.add_child(this._miniEq);
         this._addView('media', box);
     }
@@ -1004,14 +1017,14 @@ class Island extends St.Widget {
         this._settings.connectObject('changed::alarms', () => this._syncToolsIfOpen(), this);
         this._x.btCalls.connectObject('changed', () => this._onBtCalls(), this);
         this._x.gsconnect.connectObject(
-            'changed', () => this._syncToolsIfOpen(),
+            'changed', () => this._onPhoneStatusChanged(),
             'charging', (_w, {name, level}) => {
                 if (this._settings.get_boolean('show-phone'))
                     this._showEvent({iconName: 'battery-good-charging-symbolic', title: `${name} charging`,
                         value: `${level}%`, valueClass: 'li-battery-ok', iconClass: 'li-battery-ok'});
             }, this);
         this._x.phoneBattery.connectObject('changed', () => {
-            this._syncToolsIfOpen();
+            this._onPhoneStatusChanged();
             this._checkPhoneBattery();
         }, this);
         this._x.gsconnect.connectObject('changed', () => this._checkPhoneBattery(), this);
@@ -1025,6 +1038,28 @@ class Island extends St.Widget {
             return {name: gsc.name, percent: gsc.level, charging: gsc.charging, signalIcon: gsc.signalIcon};
         const bt = this._x.phoneBattery.phones[0];
         return bt ? {name: bt.model, percent: bt.percent, charging: false, signalIcon: null} : null;
+    }
+
+    _onPhoneStatusChanged() {
+        this._syncToolsIfOpen();
+        this._syncMediaPhone();
+        if (this._state === 'media')
+            this._reposition();
+    }
+
+    // Compact media trailing chip: phone % (+ charging bolt).
+    _syncMediaPhone() {
+        if (!this._miniPhone)
+            return;
+        const show = this._settings.get_boolean('show-phone');
+        const phone = show ? this._phoneStatus() : null;
+        this._miniPhone.visible = !!phone;
+        if (!phone)
+            return;
+        this._miniPhoneLabel.text = `${phone.percent}%`;
+        this._miniPhoneCharge.visible = !!phone.charging;
+        const low = phone.percent <= 20 && !phone.charging;
+        this._miniPhoneLabel.style_class = `li-mini-phone-pct${low ? ' li-battery-low' : phone.charging ? ' li-battery-ok' : ''}`;
     }
 
     // A hard-to-miss alert when the phone runs low, at the threshold and
@@ -1155,10 +1190,12 @@ class Island extends St.Widget {
             return 'call';
         if (this._current && phoneKind(this._current) === 'call')
             return 'call';
-        if (this._current)
-            return this._expanded || this._replying ? 'notification-open' : 'notification';
+        // Volume/brightness must interrupt banners and media, otherwise a
+        // stuck notification (or phone spam) hides the OSD entirely.
         if (this._osd)
             return 'osd';
+        if (this._current)
+            return this._expanded || this._replying ? 'notification-open' : 'notification';
         if (this._event)
             return 'event';
         if (this._listOpen)
@@ -1238,8 +1275,10 @@ class Island extends St.Widget {
         }
         if (state === 'live' || state === 'idle-open' || state === 'media')
             this._syncLive();
-        if (state === 'media' || state === 'media-open')
+        if (state === 'media' || state === 'media-open') {
             this._syncMedia();
+            this._syncMediaPhone();
+        }
         if (state === 'list')
             this._syncList();
     }
@@ -1610,6 +1649,10 @@ class Island extends St.Widget {
     _enqueue(n) {
         const kind = phoneKind(n);
         if (kind && !this._settings.get_boolean('show-phone'))
+            return;
+        // Mirrored app noise (YouTube, Reddit…) steals the island from media;
+        // keep calls, SMS and repliable messages only.
+        if (isGenericPhoneMirror(n))
             return;
         // The same call already came in over Bluetooth, with Answer.
         if ((kind === 'call' || kind === 'ongoing') && (this._x.btCalls.ringing || this._x.btCalls.live))

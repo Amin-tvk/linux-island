@@ -13,6 +13,18 @@ const PLAYER_IFACE = 'org.mpris.MediaPlayer2.Player';
 // playerctld re-exports other players; showing it would duplicate them.
 const IGNORED_PLAYERS = ['org.mpris.MediaPlayer2.playerctld'];
 
+// BlueZ mpris-proxy / GSConnect phone players (e.g. POCO_X3_Pro) steal the
+// island from desktop apps unless the user explicitly cycles to them.
+function isRemotePlayer(busName, desktopEntry) {
+    const name = busName.startsWith(MPRIS_PREFIX) ? busName.slice(MPRIS_PREFIX.length) : busName;
+    if (name.startsWith('GSConnect'))
+        return true;
+    // Device aliases from mpris-proxy: no DesktopEntry, no instance dots.
+    if (!desktopEntry && !name.includes('.') && /_/.test(name))
+        return true;
+    return false;
+}
+
 const PlayerProxy = Gio.DBusProxy.makeProxyWrapper(`
 <node>
   <interface name="org.mpris.MediaPlayer2.Player">
@@ -75,6 +87,7 @@ export class Player extends EventEmitter {
         this.lastActive = 0;
         this.hasTrackList = false;
         this.hasPlaylists = false;
+        this.isRemote = isRemotePlayer(busName, '');
 
         this._position = 0;
         this._positionTime = 0;
@@ -87,6 +100,7 @@ export class Player extends EventEmitter {
                 this.identity = proxy.Identity ?? '';
                 this.desktopEntry = proxy.DesktopEntry ?? '';
                 this.hasTrackList = !!proxy.HasTrackList;
+                this.isRemote = isRemotePlayer(busName, this.desktopEntry);
                 this.emit('changed');
                 this._probePlaylists();
             }, this._cancellable);
@@ -341,16 +355,20 @@ export class MprisWatcher extends EventEmitter {
     }
 
     // Show the player the user picked, else the one that played most recently.
+    // Phone/remote players are ignored unless pinned or nothing else is valid.
     _update() {
         const players = this.players;
+        const desktop = players.filter(p => !p.isRemote);
+        const pool = desktop.length > 0 ? desktop : players;
         let active = null;
         if (this._pinned && players.includes(this._pinned))
             active = this._pinned;
         else
-            active = players.sort((a, b) => b.lastActive - a.lastActive)[0] ?? null;
+            active = pool.sort((a, b) => b.lastActive - a.lastActive)[0] ?? null;
 
-        // A player that starts playing after the pick takes over.
-        const started = players.filter(p =>
+        // A desktop player that starts playing after the pick takes over.
+        // Remote players only take over when the pool is remote-only (or pinned).
+        const started = pool.filter(p =>
             p.status === 'Playing' && p.lastActive > this._pinnedAt);
         if (active?.status !== 'Playing' && started.length > 0) {
             active = started.sort((a, b) => b.lastActive - a.lastActive)[0];
