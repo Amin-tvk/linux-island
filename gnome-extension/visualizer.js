@@ -110,37 +110,6 @@ export class Spectrum extends EventEmitter {
     }
 }
 
-// A point and its outward normal at distance @d along a rounded rect's
-// outline, starting at the top centre and going clockwise.
-function outlinePoint(x, y, w, h, r, d) {
-    const straightW = w - 2 * r, straightH = h - 2 * r, arc = Math.PI * r / 2;
-    const segs = [
-        ['line', straightW / 2, [x + w / 2, y], [1, 0], [0, -1]],
-        ['arc', arc, [x + w - r, y + r], -Math.PI / 2],
-        ['line', straightH, [x + w, y + r], [0, 1], [1, 0]],
-        ['arc', arc, [x + w - r, y + h - r], 0],
-        ['line', straightW, [x + w - r, y + h], [-1, 0], [0, 1]],
-        ['arc', arc, [x + r, y + h - r], Math.PI / 2],
-        ['line', straightH, [x, y + h - r], [0, -1], [-1, 0]],
-        ['arc', arc, [x + r, y + r], Math.PI],
-        ['line', straightW / 2, [x + r, y], [1, 0], [0, -1]],
-    ];
-    for (const seg of segs) {
-        const len = seg[1];
-        if (d <= len || seg === segs[segs.length - 1]) {
-            if (seg[0] === 'line') {
-                const [[sx, sy], [dx, dy], normal] = [seg[2], seg[3], seg[4]];
-                return [sx + dx * d, sy + dy * d, normal[0], normal[1]];
-            }
-            const [cx, cy] = seg[2];
-            const a = seg[3] + (len > 0 ? d / r : 0);
-            return [cx + Math.cos(a) * r, cy + Math.sin(a) * r, Math.cos(a), Math.sin(a)];
-        }
-        d -= len;
-    }
-    return [x, y, 0, -1];
-}
-
 // Drawn behind the island, a little larger than it, following its geometry.
 export const Aura = GObject.registerClass(
 class Aura extends St.DrawingArea {
@@ -149,7 +118,7 @@ class Aura extends St.DrawingArea {
         this._island = island;
         this._spectrum = spectrum;
         this._margin = margin;
-        this.mode = 'bars';
+        this.mode = 'line';
         this.color = [255, 255, 255];
         this.radius = 18;
         this.scale = 1;
@@ -176,6 +145,7 @@ class Aura extends St.DrawingArea {
         const cr = this.get_context();
         const [w, h] = this.get_surface_size();
         const m = this._margin;
+        const s = this.scale;
         const levels = this._spectrum.levels;
         const [r, g, b] = this.color.map(c => c / 255);
         const iw = w - 2 * m, ih = h - 2 * m;
@@ -185,40 +155,54 @@ class Aura extends St.DrawingArea {
         }
         const radius = Math.min(this.radius, ih / 2, iw / 2);
 
-        if (this.mode === 'glow') {
-            const bass = (levels[0] + levels[1] + levels[2] + levels[3]) / 4;
-            const mid = levels.slice(4, 16).reduce((a, v) => a + v, 0) / 12;
-            const steps = 10;
-            for (let i = steps; i > 0; i--) {
-                const grow = (i / steps) * m * Math.min(1, 0.35 + bass);
-                roundedRect(cr, m - grow, m - grow, iw + 2 * grow, ih + 2 * grow, radius + grow);
-                cr.setSourceRGBA(r, g, b, 0.05 * (0.4 + mid + bass));
-                cr.fill();
-            }
+        if (this.mode === 'bars') {
+            this._drawSpectrum(cr, m, iw, ih, s, levels, [r, g, b]);
         } else {
-            const perim = 2 * (iw - 2 * radius) + 2 * (ih - 2 * radius) + 2 * Math.PI * radius;
-            const count = Math.max(24, Math.round(perim / (6.5 * this.scale)));
-            const lineWidth = 3 * this.scale;
-            cr.setLineCap(1); // ROUND
-            cr.setLineWidth(lineWidth);
-            for (let k = 0; k < count; k++) {
-                // Mirror the spectrum so it is symmetric, bass at the bottom.
-                const u = k / count;
-                const fromBottom = Math.abs(u - 0.5) * 2; // 0 at bottom, 1 at top
-                const band = Math.min(levels.length - 1, Math.floor(fromBottom * (levels.length - 1)));
-                const v = Math.sqrt(Math.min(1, levels[band]));
-                if (v < 0.08)
-                    continue;
-                const [px, py, nx, ny] = outlinePoint(m, m, iw, ih, radius, u * perim);
-                const start = 2.5 * this.scale;
-                const len = start + v * (m - start - lineWidth);
-                cr.moveTo(px + nx * start, py + ny * start);
-                cr.lineTo(px + nx * len, py + ny * len);
-                cr.setSourceRGBA(r, g, b, 0.45 + 0.55 * v);
+            // A hairline around the pill that brightens with the beat.
+            const bass = (levels[0] + levels[1] + levels[2]) / 3;
+            const mid = levels.slice(3, 12).reduce((a, v) => a + v, 0) / 9;
+            const target = Math.min(1, 0.7 * bass + 0.5 * mid);
+            this._energy = (this._energy ?? 0) * 0.6 + target * 0.4;
+            const e = this._energy;
+            const inset = 0.5 * s;
+            for (const [extra, alpha] of [[5, 0.05], [3, 0.09], [1.5, 0.16]]) {
+                const grow = extra * s * e;
+                roundedRect(cr, m - inset - grow, m - inset - grow,
+                    iw + 2 * (inset + grow), ih + 2 * (inset + grow), radius + inset + grow);
+                cr.setLineWidth(1.2 * s);
+                cr.setSourceRGBA(r, g, b, alpha * e);
                 cr.stroke();
             }
+            roundedRect(cr, m - inset, m - inset, iw + 2 * inset, ih + 2 * inset, radius + inset);
+            cr.setLineWidth((1 + 0.6 * e) * s);
+            cr.setSourceRGBA(r, g, b, 0.12 + 0.6 * e);
+            cr.stroke();
         }
         cr.$dispose();
+    }
+
+    // A slim, mirrored spectrum centred under the pill, fading at the ends.
+    _drawSpectrum(cr, m, iw, ih, s, levels, [r, g, b]) {
+        const count = 24;
+        const barW = 2 * s, gap = 2.5 * s;
+        const total = count * barW + (count - 1) * gap;
+        const x0 = m + (iw - total) / 2;
+        const top = m + ih + 3 * s;
+        const maxH = m - 4 * s;
+        cr.setLineCap(1); // ROUND
+        cr.setLineWidth(barW);
+        for (let i = 0; i < count; i++) {
+            const fromCentre = Math.abs(i - (count - 1) / 2) / ((count - 1) / 2);
+            const band = Math.round(fromCentre * 14);
+            const v = Math.sqrt(Math.min(1, levels[band] ?? 0));
+            const fade = 1 - fromCentre * 0.7;
+            const x = x0 + i * (barW + gap) + barW / 2;
+            const len = Math.max(0.5 * s, v * maxH);
+            cr.moveTo(x, top);
+            cr.lineTo(x, top + len);
+            cr.setSourceRGBA(r, g, b, (0.25 + 0.65 * v) * fade);
+            cr.stroke();
+        }
     }
 });
 

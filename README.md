@@ -8,7 +8,7 @@
 
 **Music**
 - **Now playing from any app** – browsers (YouTube, SoundCloud…), Spotify, VLC, Rhythmbox, mpv… anything that speaks MPRIS. Cover art, title, artist, progress bar with click-to-seek, play / pause / next / previous.
-- **Music visualizer** – bars around the island (or a pulsing glow) that react to the sound actually playing. The equalizer inside the pill follows the music too.
+- **Music visualizer** (on/off in Settings) – a minimal effect that follows the sound actually playing: a thin outline that pulses with the beat, or a slim spectrum under the pill. The equalizer inside the pill follows the music too.
 - **Up next & playlists** – for players that publish them (VLC, Strawberry, Clementine, Rhythmbox, Lollypop, Elisa…): see the queue and your playlists and jump to any of them.
 - **Colours follow the cover art**, and the island **peeks** at each new song for a moment.
 - Scroll sideways to skip tracks, click the player name to switch between players, click the cover to open the player.
@@ -148,7 +148,7 @@ GNOME passes notification events to apps through a separate helper process, and 
 ## Troubleshooting
 
 - **GNOME: nothing appears** – log out and in, then check `gnome-extensions info linux-island@miverasan.com` and `journalctl --user -b | grep -i island`.
-- **No visualizer** – install the GStreamer *good* plugins (`gst-plugins-good`, on Debian/Ubuntu `gstreamer1.0-plugins-good` and `gstreamer1.0-pulseaudio`). It listens to what your speakers play, so GNOME may show the microphone/recording indicator while music plays; set *Music visualizer* to *Off* if you don't want that.
+- **No visualizer** – install the GStreamer *good* plugins (`gst-plugins-good`, on Debian/Ubuntu `gstreamer1.0-plugins-good` and `gstreamer1.0-pulseaudio`). It listens to what your speakers play, so GNOME may show the microphone/recording indicator while music plays; turn *Music visualizer* off in Settings if you don't want that.
 - **A player isn't shown** – check it supports MPRIS: `busctl --user list | grep mpris`.
 - **No queue button** – the player doesn't publish its queue over MPRIS (Spotify and browsers don't).
 - **Standalone on Wayland is a normal window** – `gtk-layer-shell` isn't installed, or your compositor doesn't support layer-shell (GNOME). Run `linux-island` from a terminal to see messages.

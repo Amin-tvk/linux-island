@@ -5,7 +5,7 @@ import Gtk from 'gi://Gtk';
 
 import {ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
-const VISUALIZER_MODES = [['bars', 'Bars around the island'], ['glow', 'Pulsing glow'], ['off', 'Off']];
+const VISUALIZER_MODES = [['line', 'Outline pulse'], ['bars', 'Mini spectrum']];
 
 export default class LinuxIslandPreferences extends ExtensionPreferences {
     fillPreferencesWindow(window) {
@@ -35,9 +35,10 @@ export default class LinuxIslandPreferences extends ExtensionPreferences {
         look.add(spinRow('animation-speed', 'Animation speed', 0.5, 2.5, 0.1, 1, 'Higher is faster'));
         look.add(spinRow('top-margin', 'Gap below the top bar (px)', 0, 200));
 
+        look.add(switchRow('visualizer-enabled', 'Music visualizer',
+            'A subtle effect that follows the sound that is playing'));
         const visualizer = new Adw.ComboRow({
-            title: 'Music visualizer',
-            subtitle: 'Reacts to the sound that is playing',
+            title: 'Visualizer style',
             model: Gtk.StringList.new(VISUALIZER_MODES.map(([, name]) => name)),
         });
         const syncVisualizer = () => {
@@ -47,6 +48,7 @@ export default class LinuxIslandPreferences extends ExtensionPreferences {
         settings.connect('changed::visualizer', syncVisualizer);
         visualizer.connect('notify::selected', () =>
             settings.set_string('visualizer', VISUALIZER_MODES[visualizer.selected][0]));
+        settings.bind('visualizer-enabled', visualizer, 'sensitive', Gio.SettingsBindFlags.GET);
         look.add(visualizer);
         look.add(switchRow('glow', 'Cover-colour glow'));
         page.add(look);

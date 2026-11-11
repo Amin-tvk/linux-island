@@ -37,14 +37,17 @@
       <default>true</default>
       <summary>Briefly expand when the song changes</summary>
     </key>
+    <key name="visualizer-enabled" type="b">
+      <default>true</default>
+      <summary>Music visualizer around the island</summary>
+    </key>
     <key name="visualizer" type="s">
       <choices>
+        <choice value="line"/>
         <choice value="bars"/>
-        <choice value="glow"/>
-        <choice value="off"/>
       </choices>
-      <default>'bars'</default>
-      <summary>Audio visualizer around the island</summary>
+      <default>'line'</default>
+      <summary>Visualizer style: outline pulse or mini spectrum</summary>
     </key>
     <key name="glow" type="b">
       <default>true</default>

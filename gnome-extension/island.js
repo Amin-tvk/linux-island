@@ -256,7 +256,7 @@ class Island extends St.Widget {
         this.connect('destroy', () => this._onDestroy());
 
         Main.layoutManager.addChrome(this, {trackFullscreen: true});
-        this._aura = new Aura(this, spectrum, this._px(22));
+        this._aura = new Aura(this, spectrum, this._px(14));
         spectrum.connectObject('levels', (_s, levels) => {
             if (this._state === 'media')
                 this._miniEq.setLevels(levels);
@@ -827,7 +827,8 @@ class Island extends St.Widget {
     // Periodic refreshes only run while the view that needs them is shown.
     _updateTickers() {
         const playing = this._mpris.active?.status === 'Playing';
-        const mode = this._settings.get_string('visualizer');
+        const mode = this._settings.get_boolean('visualizer-enabled')
+            ? this._settings.get_string('visualizer') : 'off';
         const showing = this._state?.startsWith('media') && playing &&
             !this._suspended && !this._bannerShown;
         // The spectrum drives the aura and the small equalizer bars; with the
@@ -941,7 +942,7 @@ class Island extends St.Widget {
             this._aura.radius = radius;
             this._aura.color = this._accent;
             this._aura.scale = this._scale;
-            this._aura.setMargin(this._px(22));
+            this._aura.setMargin(this._px(14));
         }
     }
 
