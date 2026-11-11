@@ -133,7 +133,7 @@
 .li-live-orange { color: #ffb35c; }
 .li-live-tomato { color: #ff7a5c; }
 .li-live-green, .li-live-call { color: #4cd964; }
-.li-live-rec { color: #ff453a; }
+.li-live-rec, .li-live-red { color: #ff453a; }
 .li-live-white { color: #ffffff; }
 .li-rec-stop { padding: 0.3em; color: #ff453a; }
 

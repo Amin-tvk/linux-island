@@ -312,14 +312,12 @@ export class WeatherWatcher extends EventEmitter {
 const UPOWER = 'org.freedesktop.UPower';
 const UPOWER_DEVICE = 'org.freedesktop.UPower.Device';
 const TYPE_PHONE = 8;
-const PHONE_LOW = [20, 10];
 
-// Emits 'changed' and 'low' {model, percent}. .phones: [{path, model, percent}].
+// Emits 'changed'. .phones: [{path, model, percent}].
 export class PhoneBatteryWatcher extends EventEmitter {
     constructor() {
         super();
         this._phones = new Map();
-        this._warned = new Map();
         this._cancellable = new Gio.Cancellable();
         const bus = Gio.DBus.system;
         this._subs = [
@@ -358,16 +356,7 @@ export class PhoneBatteryWatcher extends EventEmitter {
                 }
                 if (props.Type !== TYPE_PHONE || !props.IsPresent)
                     return;
-                const percent = Math.round(props.Percentage);
-                const phone = {path, model: props.Model || 'Phone', percent};
-                this._phones.set(path, phone);
-                const level = PHONE_LOW.filter(l => percent <= l).pop();
-                if (level !== undefined && this._warned.get(path) !== level) {
-                    this._warned.set(path, level);
-                    this.emit('low', phone);
-                } else if (level === undefined) {
-                    this._warned.delete(path);
-                }
+                this._phones.set(path, {path, model: props.Model || 'Phone', percent: Math.round(props.Percentage)});
                 this.emit('changed');
             });
     }

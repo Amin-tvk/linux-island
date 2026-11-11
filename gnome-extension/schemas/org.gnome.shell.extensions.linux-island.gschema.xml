@@ -57,6 +57,11 @@
       <default>true</default>
       <summary>Phone calls and messages from GSConnect</summary>
     </key>
+    <key name="phone-battery-warning" type="i">
+      <range min="0" max="50"/>
+      <default>20</default>
+      <summary>Warn when the phone's battery drops to this percent (0 = off); again at 10%</summary>
+    </key>
     <key name="show-bluetooth" type="b">
       <default>true</default>
       <summary>Bluetooth devices connecting, with battery level</summary>

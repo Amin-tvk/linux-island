@@ -23,7 +23,7 @@
 - **Bluetooth calls**: with the phone connected over Bluetooth, incoming calls show the number with **Answer** and **Decline** buttons; answer and you talk through the laptop. During the call the pill shows a timer and a hang-up button.
 - **Incoming calls** get their own view with the caller's name and photo, a green glow and a **Mute** button. An answered call becomes a small live timer.
 - **SMS and phone notifications** (WhatsApp, Telegram… on the phone) show up like any message, and **Reply** sends your answer **through the phone**.
-- **Phone status** in the clock view: battery level (over GSConnect or plain Bluetooth), charging and mobile signal; the island tells you when the phone starts charging or its battery gets low.
+- **Phone status** in the clock view: battery level (over GSConnect or plain Bluetooth), charging and mobile signal; the island tells you when the phone starts charging, and a **red alert with a sound** when its battery drops to 20% and again at 10% (adjustable) so you plug it in in time.
 
 ![Incoming call, ongoing call, phone message, screen recording, Pomodoro, clock & tools, Bluetooth headphones, meeting reminder, clipboard, alarm](docs/more-features.png)
 

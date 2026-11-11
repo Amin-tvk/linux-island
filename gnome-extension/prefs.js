@@ -81,6 +81,8 @@ export default class LinuxIslandPreferences extends ExtensionPreferences {
         });
         phone.add(switchRow('show-phone', 'Calls and phone messages',
             'Ringing calls get their own view with a Mute button; answered calls show a timer; replies go through your phone'));
+        phone.add(spinRow('phone-battery-warning', 'Low phone battery alert (%)', 0, 50, 1, 0,
+            'A red alert with a sound at this level and again at 10%; 0 turns it off'));
         page.add(phone);
 
         const system = new Adw.PreferencesGroup({title: 'System'});

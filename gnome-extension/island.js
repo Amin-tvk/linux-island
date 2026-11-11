@@ -77,6 +77,7 @@ const DONE_COLORS = {
     orange: [255, 159, 67],
     tomato: [255, 99, 71],
     green: [52, 199, 89],
+    red: [255, 69, 58],
 };
 
 function formatStopwatch(ms) {
@@ -559,16 +560,7 @@ class Island extends St.Widget {
             this._weatherLabel.text = this._x.weather.text;
             this._weatherIcon.icon_name = this._x.weather.iconName;
         }
-        // GSConnect knows more (charging, signal); Bluetooth only the level.
-        let phone = null;
-        if (this._settings.get_boolean('show-phone')) {
-            const gsc = this._x.gsconnect.phone;
-            const bt = this._x.phoneBattery.phones[0];
-            if (gsc && gsc.level >= 0)
-                phone = {percent: gsc.level, charging: gsc.charging, signalIcon: gsc.signalIcon};
-            else if (bt)
-                phone = {percent: bt.percent, charging: false, signalIcon: null};
-        }
+        const phone = this._settings.get_boolean('show-phone') ? this._phoneStatus() : null;
         this._phoneIcon.visible = this._phoneLabel.visible = !!phone;
         this._phoneCharge.visible = !!phone?.charging;
         this._phoneSignal.visible = !!phone?.signalIcon;
@@ -1017,14 +1009,46 @@ class Island extends St.Widget {
                     this._showEvent({iconName: 'battery-good-charging-symbolic', title: `${name} charging`,
                         value: `${level}%`, valueClass: 'li-battery-ok', iconClass: 'li-battery-ok'});
             }, this);
-        this._x.phoneBattery.connectObject(
-            'changed', () => this._syncToolsIfOpen(),
-            'low', (_w, phone) => {
-                if (!this._settings.get_boolean('show-phone'))
-                    return;
-                this._showEvent({iconName: 'phone-symbolic', title: `${phone.model} battery low`,
-                    value: `${phone.percent}%`, valueClass: 'li-battery-low', duration: 5000});
-            }, this);
+        this._x.phoneBattery.connectObject('changed', () => {
+            this._syncToolsIfOpen();
+            this._checkPhoneBattery();
+        }, this);
+        this._x.gsconnect.connectObject('changed', () => this._checkPhoneBattery(), this);
+        this._phoneWarned = new Set();
+    }
+
+    // The phone's battery from GSConnect (knows charging) or Bluetooth.
+    _phoneStatus() {
+        const gsc = this._x.gsconnect.phone;
+        if (gsc && gsc.level >= 0)
+            return {name: gsc.name, percent: gsc.level, charging: gsc.charging, signalIcon: gsc.signalIcon};
+        const bt = this._x.phoneBattery.phones[0];
+        return bt ? {name: bt.model, percent: bt.percent, charging: false, signalIcon: null} : null;
+    }
+
+    // A hard-to-miss alert when the phone runs low, at the threshold and
+    // again at 10%, so it gets plugged in in time.
+    _checkPhoneBattery() {
+        const threshold = this._settings.get_int('phone-battery-warning');
+        const phone = this._phoneStatus();
+        if (!phone || threshold <= 0 || !this._settings.get_boolean('show-phone'))
+            return;
+        if (phone.charging || phone.percent > threshold) {
+            this._phoneWarned.clear();
+            return;
+        }
+        const level = phone.percent <= Math.min(10, threshold) ? Math.min(10, threshold) : threshold;
+        if (this._phoneWarned.has(level))
+            return;
+        [threshold, Math.min(10, threshold)].filter(l => l >= level).forEach(l => this._phoneWarned.add(l));
+        this._showDone({
+            iconName: 'battery-caution-symbolic',
+            title: `${phone.name}: ${phone.percent}%`,
+            subtitle: 'Phone battery low – plug it in',
+            color: 'red',
+            sound: 'dialog-warning',
+            timeout: 60000,
+        });
     }
 
     // Bluetooth calls; GSConnect's notifications for the same call are
