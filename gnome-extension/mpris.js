@@ -42,8 +42,13 @@ const RootProxy = Gio.DBusProxy.makeProxyWrapper(`
     <property name="CanRaise" type="b" access="read"/>
     <property name="Identity" type="s" access="read"/>
     <property name="DesktopEntry" type="s" access="read"/>
+    <property name="HasTrackList" type="b" access="read"/>
   </interface>
 </node>`);
+
+const TRACKLIST_IFACE = 'org.mpris.MediaPlayer2.TrackList';
+const PLAYLISTS_IFACE = 'org.mpris.MediaPlayer2.Playlists';
+const NO_TRACK = '/org/mpris/MediaPlayer2/TrackList/NoTrack';
 
 function asString(v) {
     if (Array.isArray(v))
@@ -68,6 +73,8 @@ export class Player extends EventEmitter {
         this.identity = '';
         this.desktopEntry = '';
         this.lastActive = 0;
+        this.hasTrackList = false;
+        this.hasPlaylists = false;
 
         this._position = 0;
         this._positionTime = 0;
@@ -79,7 +86,9 @@ export class Player extends EventEmitter {
                     return;
                 this.identity = proxy.Identity ?? '';
                 this.desktopEntry = proxy.DesktopEntry ?? '';
+                this.hasTrackList = !!proxy.HasTrackList;
                 this.emit('changed');
+                this._probePlaylists();
             }, this._cancellable);
 
         this._proxy = new PlayerProxy(Gio.DBus.session, busName, MPRIS_PATH,
@@ -187,6 +196,76 @@ export class Player extends EventEmitter {
 
     raise() {
         this._root?.RaiseRemote(() => {});
+    }
+
+    _call(iface, method, params, replyType = null) {
+        return new Promise((resolve, reject) => {
+            Gio.DBus.session.call(this.busName, MPRIS_PATH, iface, method, params,
+                replyType ? new GLib.VariantType(replyType) : null,
+                Gio.DBusCallFlags.NONE, 2000, this._cancellable, (conn, res) => {
+                    try {
+                        resolve(conn.call_finish(res));
+                    } catch (e) {
+                        reject(e);
+                    }
+                });
+        });
+    }
+
+    async _probePlaylists() {
+        try {
+            const v = await this._call('org.freedesktop.DBus.Properties', 'Get',
+                new GLib.Variant('(ss)', [PLAYLISTS_IFACE, 'PlaylistCount']));
+            this.hasPlaylists = v.deepUnpack()[0].deepUnpack() > 0;
+        } catch {
+            this.hasPlaylists = false;
+        }
+        this.emit('changed');
+    }
+
+    // Up next: [{id, title, artist, artUrl, current}], or [] if unsupported.
+    async getQueue() {
+        if (!this.hasTrackList)
+            return [];
+        const tracks = await this._call('org.freedesktop.DBus.Properties', 'Get',
+            new GLib.Variant('(ss)', [TRACKLIST_IFACE, 'Tracks']));
+        const ids = tracks.deepUnpack()[0].deepUnpack().slice(0, 100);
+        if (ids.length === 0)
+            return [];
+        const res = await this._call(TRACKLIST_IFACE, 'GetTracksMetadata',
+            new GLib.Variant('(ao)', [ids]));
+        return res.recursiveUnpack()[0].map(m => ({
+            id: asString(m['mpris:trackid']),
+            title: asString(m['xesam:title']) || asString(m['xesam:url']).split('/').pop(),
+            artist: asString(m['xesam:artist']),
+            current: asString(m['mpris:trackid']) === this.trackId,
+        })).filter(t => t.id && t.id !== NO_TRACK);
+    }
+
+    goTo(trackId) {
+        this._call(TRACKLIST_IFACE, 'GoTo', new GLib.Variant('(o)', [trackId])).catch(() => {});
+    }
+
+    // [{id, name, active}], or [] if unsupported.
+    async getPlaylists() {
+        if (!this.hasPlaylists)
+            return [];
+        const res = await this._call(PLAYLISTS_IFACE, 'GetPlaylists',
+            new GLib.Variant('(uusb)', [0, 50, 'UserDefined', false]));
+        let active = null;
+        try {
+            const v = await this._call('org.freedesktop.DBus.Properties', 'Get',
+                new GLib.Variant('(ss)', [PLAYLISTS_IFACE, 'ActivePlaylist']));
+            const [valid, [id]] = v.deepUnpack()[0].deepUnpack();
+            active = valid ? id : null;
+        } catch {
+            // optional property
+        }
+        return res.deepUnpack()[0].map(([id, name]) => ({id, name, active: id === active}));
+    }
+
+    activatePlaylist(id) {
+        this._call(PLAYLISTS_IFACE, 'ActivatePlaylist', new GLib.Variant('(o)', [id])).catch(() => {});
     }
 
     destroy() {
