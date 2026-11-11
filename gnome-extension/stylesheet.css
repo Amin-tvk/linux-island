@@ -153,3 +153,8 @@
 .li-pdot-mic { background-color: #ff9f0a; }
 .li-pdot-cam { background-color: #30d158; }
 .li-pdot-rec { background-color: #ff453a; }
+
+.li-call-answer { background-color: #30d158; color: #ffffff; padding: 0.7em; }
+.li-call-answer:hover { background-color: #3ee06a; }
+.li-call-decline { background-color: #ff453a; color: #ffffff; padding: 0.7em; }
+.li-call-decline:hover { background-color: #ff6159; }

@@ -19,7 +19,8 @@
 - **Quick reply** for messengers: type in the island, press Enter – it opens the chat, pastes your text and sends it. If the chat window doesn't come up, nothing is typed anywhere; your text stays on the clipboard.
 - **Notification list** – the bell (or right-click the island, or Super+Alt+N) shows recent notifications; a red dot means unread.
 
-**Phone** (Android, through [GSConnect](#phone-calls-and-sms))
+**Phone** (Android, over Bluetooth and/or [GSConnect](#phone-calls-and-sms))
+- **Bluetooth calls**: with the phone connected over Bluetooth, incoming calls show the number with **Answer** and **Decline** buttons; answer and you talk through the laptop. During the call the pill shows a timer and a hang-up button.
 - **Incoming calls** get their own view with the caller's name and photo, a green glow and a **Mute** button. An answered call becomes a small live timer.
 - **SMS and phone notifications** (WhatsApp, Telegram… on the phone) show up like any message, and **Reply** sends your answer **through the phone**.
 
@@ -165,6 +166,10 @@ Linux Island shows your Android phone's calls and messages through **GSConnect**
 4. In KDE Connect on the phone, give it the permissions for **Telephony**, **SMS** and **Notifications** (Android asks for each).
 
 That's it: calls ring in the island, and messages from the phone can be answered from it. If GSConnect isn't installed, the island just doesn't show phone events.
+
+### Calls over Bluetooth (no Wi-Fi needed)
+
+Pair the phone in GNOME Settings → Bluetooth, then on the phone open Bluetooth → the gear next to your computer and turn on **Phone calls**. PipeWire then exposes the phone's calls (`org.pipewire.Telephony`), and the island can answer and hang up. *Media audio* is optional: it only plays the phone's sound through the laptop. Text messages over Bluetooth (MAP) depend on the phone; many Android phones refuse it, so messages come through GSConnect.
 
 ## How quick reply works (GNOME)
 

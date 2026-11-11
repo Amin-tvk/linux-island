@@ -15,6 +15,7 @@ import {DEFAULT_ACCENT} from './art.js';
 import {changeVolume} from './system.js';
 import {Aura} from './visualizer.js';
 import {canReplyViaPhone, phoneKind, replyViaPhone, sourceApp} from './phone.js';
+import {formatNumber} from './telephony.js';
 import {formatTime, formatUs} from './timer.js';
 
 // [width, height] of the island in each state, at scale 1.
@@ -568,7 +569,7 @@ class Island extends St.Widget {
         this._liveIcon = this._icon('alarm-symbolic', 15);
         this._liveLabel = label('', 'li-live-label', {x_expand: true});
         this._liveValue = label('', 'li-timer-small');
-        this._liveStop = this._iconButton('media-playback-stop-symbolic', 'li-small-btn li-rec-stop', 12, () => this._x.privacy.stopRecording());
+        this._liveStop = this._iconButton('media-playback-stop-symbolic', 'li-small-btn li-rec-stop', 12, () => this._liveAction?.());
         box.add_child(this._liveIcon);
         box.add_child(this._liveLabel);
         box.add_child(this._liveValue);
@@ -821,10 +822,23 @@ class Island extends St.Widget {
             this._callSub.text = 'Muted';
         });
         this._callDismiss = this._iconButton('window-close-symbolic', 'li-round-btn', 16, () => this._nextNotification());
+        // Bluetooth calls can be answered right here.
+        this._callDecline = this._iconButton('call-stop-symbolic', 'li-round-btn li-call-decline', 18, () => {
+            const call = this._x.btCalls.ringing;
+            if (call)
+                this._x.btCalls.hangup(call.path);
+        });
+        this._callAnswer = this._iconButton('call-start-symbolic', 'li-round-btn li-call-answer', 18, () => {
+            const call = this._x.btCalls.ringing;
+            if (call)
+                this._x.btCalls.answer(call.path);
+        });
         box.add_child(this._callIcon);
         box.add_child(text);
         box.add_child(this._callMute);
         box.add_child(this._callDismiss);
+        box.add_child(this._callDecline);
+        box.add_child(this._callAnswer);
         this._addView('call', box);
     }
 
@@ -961,6 +975,32 @@ class Island extends St.Widget {
             });
         }, this);
         this._settings.connectObject('changed::alarms', () => this._syncToolsIfOpen(), this);
+        this._x.btCalls.connectObject('changed', () => this._onBtCalls(), this);
+    }
+
+    // Bluetooth calls; GSConnect's notifications for the same call are
+    // dropped so it isn't shown twice.
+    _onBtCalls() {
+        const ringing = this._x.btCalls.ringing;
+        if (ringing) {
+            if (phoneKind(this._current) === 'call')
+                this._nextNotification();
+            this._queue.filter(n => phoneKind(n) === 'call').forEach(n => this._dropNotification(n));
+            this._callName.text = ringing.name || formatNumber(ringing.number) || 'Unknown caller';
+            this._callSub.text = ringing.state === 'waiting' ? 'Call waiting' : 'Incoming call';
+            this._callIcon.gicon = new Gio.ThemedIcon({name: 'call-start-symbolic'});
+            this._showCallButtons(true);
+        }
+        this._syncLive();
+        this._update();
+        this._restyle();
+    }
+
+    _showCallButtons(bluetooth) {
+        this._callAnswer.visible = bluetooth;
+        this._callDecline.visible = bluetooth;
+        this._callMute.visible = !bluetooth && (this._current?.actions.length ?? 0) > 0;
+        this._callDismiss.visible = !bluetooth;
     }
 
     _syncToolsIfOpen() {
@@ -974,7 +1014,14 @@ class Island extends St.Widget {
         const now = GLib.get_monotonic_time();
         if (privacy.recording) {
             return {icon: 'media-record-symbolic', text: 'Recording', value: formatTime((now - privacy.recordingStart) / 1000),
-                color: 'rec', stop: true};
+                color: 'rec', action: {icon: 'media-playback-stop-symbolic', run: () => privacy.stopRecording()}};
+        }
+        const bt = this._x.btCalls.live;
+        if (bt) {
+            const talking = bt.state === 'active' && bt.start;
+            return {icon: 'call-start-symbolic', text: bt.name || formatNumber(bt.number) || 'Call',
+                value: talking ? formatTime((now - bt.start) / 1000) : bt.state === 'held' ? 'On hold' : 'Calling…',
+                color: 'call', action: {icon: 'call-stop-symbolic', run: () => this._x.btCalls.hangup(bt.path)}};
         }
         if (this._call) {
             return {icon: 'call-start-symbolic', text: this._call.name, value: formatTime((now - this._call.start) / 1000),
@@ -1003,7 +1050,10 @@ class Island extends St.Widget {
         this._liveLabel.text = info?.text ?? '';
         this._liveValue.text = info?.value ?? '';
         this._liveValue.style_class = `li-timer-small ${color}`;
-        this._liveStop.visible = !!info?.stop;
+        this._liveStop.visible = !!info?.action;
+        this._liveAction = info?.action?.run ?? null;
+        if (info?.action)
+            this._liveStop.child.icon_name = info.action.icon;
         // Media keeps its own view; the live value sits at its right.
         this._miniTimer.text = info ? (info.text && info.color === 'rec' ? `● ${info.value}` : info.value) : '';
         this._miniTimer.style_class = `li-timer-small ${color}`;
@@ -1027,6 +1077,8 @@ class Island extends St.Widget {
     _computeState() {
         if (this._done)
             return 'done';
+        if (this._x.btCalls.ringing && this._settings.get_boolean('show-phone'))
+            return 'call';
         if (this._current && phoneKind(this._current) === 'call')
             return 'call';
         if (this._current)
@@ -1189,7 +1241,7 @@ class Island extends St.Widget {
         }
 
         // Live values that change every second (stopwatch, call, recording).
-        const ticking = this._x.stopwatch.running || this._x.privacy.recording || this._call;
+        const ticking = this._x.stopwatch.running || this._x.privacy.recording || this._call || this._x.btCalls.live;
         if (ticking && ['live', 'media', 'idle-open'].includes(this._state)) {
             this._setTimeout('live', 500, () => {
                 this._syncLive();
@@ -1485,6 +1537,9 @@ class Island extends St.Widget {
         const kind = phoneKind(n);
         if (kind && !this._settings.get_boolean('show-phone'))
             return;
+        // The same call already came in over Bluetooth, with Answer.
+        if ((kind === 'call' || kind === 'ongoing') && (this._x.btCalls.ringing || this._x.btCalls.live))
+            return;
         // An answered call becomes a live activity, not a banner.
         if (kind === 'ongoing') {
             this._call = {name: stripMarkup(n.title), start: GLib.get_monotonic_time()};
@@ -1564,7 +1619,7 @@ class Island extends St.Widget {
             this._callName.text = title || app;
             this._callSub.text = 'Incoming call';
             this._callIcon.gicon = n.gicon ?? new Gio.ThemedIcon({name: 'call-start-symbolic'});
-            this._callMute.visible = n.actions.length > 0;
+            this._showCallButtons(false);
         }
 
         this._actionRow.destroy_all_children();

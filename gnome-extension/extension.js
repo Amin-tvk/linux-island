@@ -13,6 +13,7 @@ import {NotificationWatcher} from './notifications.js';
 import {QuickReply} from './reply.js';
 import {BatteryWatcher, OsdRedirect} from './system.js';
 import {AlarmClock, Pomodoro, Stopwatch, Timer} from './timer.js';
+import {BluetoothCalls} from './telephony.js';
 import {Spectrum} from './visualizer.js';
 import {
     BluetoothWatcher, CalendarWatcher, ClipboardWatcher, FocusMode, PrivacyWatcher, WeatherWatcher,
@@ -39,6 +40,7 @@ export default class LinuxIslandExtension extends Extension {
             stopwatch: new Stopwatch(),
             pomodoro: new Pomodoro(this._timer, this._settings),
             alarms: new AlarmClock(this._settings),
+            btCalls: new BluetoothCalls(),
         };
         this._island = new Island({
             settings: this._settings,
