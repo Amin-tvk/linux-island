@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Linux Island
+Comment=Dynamic Island for Linux: now playing, notifications and a timer
+Exec=linux-island
+Icon=media-playback-start-symbolic
+Categories=Utility;
+X-GNOME-Autostart-enabled=true
