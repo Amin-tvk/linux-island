@@ -12,7 +12,8 @@ import St from 'gi://St';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
-const FOCUS_TIMEOUT = 3000;
+const RAISE_AFTER = 1200;
+const FOCUS_TIMEOUT = 5000;
 const SETTLE_TIME = 450;   // let the chat view open and focus its input
 const PASTE_TIME = 400;
 const RESTORE_TIME = 1500;
@@ -75,26 +76,54 @@ export class QuickReply {
             this._press(modifier, false);
     }
 
+    _findWindow(n) {
+        return global.display.list_all_windows()
+            .filter(w => !w.skip_taskbar && this._windowMatches(w, n))
+            .sort((a, b) => b.get_user_time() - a.get_user_time())[0] ?? null;
+    }
+
     // Resolves to 'sent' or 'copied'.
     async send(n, text) {
+        const log = msg => console.log(`linux-island: reply: ${msg}`);
         const clipboard = St.Clipboard.get_default();
         const previous = await new Promise(resolve =>
             clipboard.get_text(St.ClipboardType.CLIPBOARD, (_c, t) => resolve(t)));
         clipboard.set_text(St.ClipboardType.CLIPBOARD, text);
 
-        n.activate();
+        log(`app=${appKey(n.source)} title=${n.source?.title} destroyed=${!!n._destroyed}`);
+        // The default action opens the chat the message came from.
+        if (!n._destroyed)
+            n.activate();
         Main.overview.hide();
 
+        // Apps often open the chat but can't raise their own window on
+        // Wayland (focus-stealing prevention); the shell can.
         const start = GLib.get_monotonic_time();
+        let raised = false;
         while (!this._windowMatches(global.display.focus_window, n)) {
-            if (GLib.get_monotonic_time() - start > FOCUS_TIMEOUT * 1000)
+            const elapsed = (GLib.get_monotonic_time() - start) / 1000;
+            if (!raised && elapsed > RAISE_AFTER) {
+                raised = true;
+                const window = this._findWindow(n);
+                log(`not focused yet (focus=${global.display.focus_window?.get_wm_class()}), raising ${window?.get_wm_class() ?? 'nothing'}`);
+                if (window)
+                    Main.activateWindow(window);
+                else
+                    n.source?.app?.activate();
+            }
+            if (elapsed > FOCUS_TIMEOUT) {
+                log(`gave up: focus stayed on ${global.display.focus_window?.get_wm_class()}`);
                 return 'copied';
+            }
             // eslint-disable-next-line no-await-in-loop
             await sleep(100);
         }
+        log(`focused ${global.display.focus_window?.get_wm_class()}`);
         await sleep(SETTLE_TIME);
-        if (!this._windowMatches(global.display.focus_window, n))
+        if (!this._windowMatches(global.display.focus_window, n)) {
+            log('focus moved away before pasting');
             return 'copied';
+        }
         // Keys must reach the window, not a shell widget.
         global.stage.set_key_focus(null);
 
@@ -103,6 +132,7 @@ export class QuickReply {
         // an empty message.
         await sleep(PASTE_TIME);
         this._tap(Clutter.KEY_Return);
+        log('pasted and sent');
 
         await sleep(RESTORE_TIME);
         if (previous !== null)

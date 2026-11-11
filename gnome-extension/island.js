@@ -1179,6 +1179,7 @@ class Island extends St.Widget {
 
         this._actionRow.destroy_all_children();
         const canReply = this._reply.canReply(n);
+        console.log(`linux-island: notification from app=${n.source?.app?.get_id() ?? '-'} title=${app} reply=${canReply} actions=${n.actions.map(a => a.label).join('|')}`);
         if (canReply)
             this._actionRow.add_child(this._textButton('Reply', 'li-chip li-chip-accent', () => this._startReply()));
         // The app's own "Reply" just opens the window; ours replaces it.
@@ -1233,6 +1234,7 @@ class Island extends St.Widget {
     }
 
     _startReply() {
+        console.log(`linux-island: reply: open box (current=${!!this._current}, replying=${this._replying})`);
         if (!this._current || this._replying)
             return;
         this._replying = true;
@@ -1247,6 +1249,7 @@ class Island extends St.Widget {
     async _sendReply() {
         const text = this._replyEntry.text.trim();
         const n = this._current;
+        console.log(`linux-island: reply: send pressed (chars=${text.length}, notification=${!!n})`);
         if (!text || !n)
             return;
         // Keep the notification alive while its default action is used.

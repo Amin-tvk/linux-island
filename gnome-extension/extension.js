@@ -1,3 +1,5 @@
+import Gio from 'gi://Gio';
+import GLib from 'gi://GLib';
 import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 
@@ -34,7 +36,7 @@ export default class LinuxIslandExtension extends Extension {
             osd: this._osd,
             spectrum: this._spectrum,
             reply: this._reply,
-            openPrefs: () => this.openPreferences(),
+            openPrefs: () => this._openPrefs(),
         });
 
         const mode = Shell.ActionMode.NORMAL | Shell.ActionMode.OVERVIEW;
@@ -42,6 +44,23 @@ export default class LinuxIslandExtension extends Extension {
             Meta.KeyBindingFlags.NONE, mode, () => this._island.toggle());
         Main.wm.addKeybinding('toggle-list', this._settings,
             Meta.KeyBindingFlags.NONE, mode, () => this._island.showList());
+    }
+
+    // openPreferences() fails without a trace when the call to the
+    // Extensions service errors; ask it directly and fall back to the
+    // command-line tool, which goes through the same service.
+    _openPrefs() {
+        Gio.DBus.session.call('org.gnome.Shell.Extensions', '/org/gnome/Shell/Extensions',
+            'org.gnome.Shell.Extensions', 'OpenExtensionPrefs',
+            new GLib.Variant('(ssa{sv})', [this.uuid, '', {}]),
+            null, Gio.DBusCallFlags.NONE, -1, null, (conn, res) => {
+                try {
+                    conn.call_finish(res);
+                } catch (e) {
+                    console.warn(`linux-island: opening settings failed (${e.message}), using gnome-extensions`);
+                    GLib.spawn_command_line_async(`gnome-extensions prefs ${this.uuid}`);
+                }
+            });
     }
 
     disable() {
