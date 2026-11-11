@@ -14,13 +14,14 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {DEFAULT_ACCENT} from './art.js';
 import {changeVolume} from './system.js';
 import {Aura} from './visualizer.js';
+import {canReplyViaPhone, phoneKind, replyViaPhone, sourceApp} from './phone.js';
 import {formatTime, formatUs} from './timer.js';
 
 // [width, height] of the island in each state, at scale 1.
 const SIZES = {
     'idle': [120, 10],
-    'idle-open': [360, 120],
-    'timer': [170, 34],
+    'idle-open': [380, 150],
+    'live': [220, 34],
     'media': [300, 36],
     'media-open': [420, 172],
     'notification': [420, 78],
@@ -28,8 +29,9 @@ const SIZES = {
     'list': [420, 320],
     'queue': [420, 320],
     'osd': [280, 38],
-    'battery': [280, 38],
-    'done': [280, 52],
+    'event': [320, 40],
+    'call': [420, 92],
+    'done': [300, 52],
 };
 
 // Milliseconds at animation speed 1.
@@ -68,6 +70,22 @@ function stripMarkup(text) {
 
 function notificationText(n) {
     return n.useBodyMarkup ? stripMarkup(n.body) : (n.body ?? '').replace(/\s+/g, ' ').trim();
+}
+
+const DONE_COLORS = {
+    orange: [255, 159, 67],
+    tomato: [255, 99, 71],
+    green: [52, 199, 89],
+};
+
+function formatStopwatch(ms) {
+    const tenths = Math.floor(ms / 100) % 10;
+    const s = Math.floor(ms / 1000);
+    const m = Math.floor(s / 60);
+    const pad = n => String(n).padStart(2, '0');
+    return m >= 60
+        ? `${Math.floor(m / 60)}:${pad(m % 60)}:${pad(s % 60)}`
+        : `${pad(m)}:${pad(s % 60)}.${tenths}`;
 }
 
 function timeAgo(datetime) {
@@ -200,7 +218,7 @@ const Progress = GObject.registerClass({
 
 export const Island = GObject.registerClass(
 class Island extends St.Widget {
-    constructor({settings, mpris, notifications, timer, art, battery, osd, spectrum, reply, openPrefs}) {
+    constructor({settings, mpris, notifications, timer, art, battery, osd, spectrum, reply, extras, openPrefs}) {
         super({
             name: 'linuxIsland',
             style_class: 'li-island',
@@ -216,7 +234,10 @@ class Island extends St.Widget {
         this._openPrefs = openPrefs;
         this._spectrum = spectrum;
         this._reply = reply;
+        this._x = extras;   // bluetooth, privacy, clipboard, calendar, weather, focus, stopwatch, pomodoro, alarms
         this._aura = null;
+        this._call = null;  // ongoing phone call {name, start}
+        this._done = null;  // {title, subtitle, color}
 
         this._state = null;
         this._expanded = false;
@@ -224,7 +245,6 @@ class Island extends St.Widget {
         this._listOpen = false;
         this._queueOpen = false;
         this._queueTab = 'queue';
-        this._timerDone = false;
         this._queue = [];
         this._current = null;
         this._replying = false;
@@ -257,6 +277,7 @@ class Island extends St.Widget {
 
         Main.layoutManager.addChrome(this, {trackFullscreen: true});
         this._aura = new Aura(this, spectrum, this._px(14));
+        this._buildPrivacyDots();
         spectrum.connectObject('levels', (_s, levels) => {
             if (this._state === 'media')
                 this._miniEq.setLevels(levels);
@@ -286,11 +307,14 @@ class Island extends St.Widget {
             'changed', () => this._onTimerChanged(),
             'tick', () => this._syncTimer(),
             'done', () => this._onTimerDone(), this);
-        battery.connectObject('event', (_b, ev) => this._showEvent(ev), this);
+        battery.connectObject('event', (_b, ev) => this._onBattery(ev), this);
+        this._connectExtras();
         osd.connectObject('osd', (_o, info) => this._showOsd(info), this);
         settings.connectObject('changed', (_s, key) => {
-            if (key === 'scale')
+            if (key === 'scale') {
                 this._rebuild();
+                this._buildPrivacyDots();
+            }
             this._relayout();
             this._update();
         }, this);
@@ -347,7 +371,8 @@ class Island extends St.Widget {
         this._buildList();
         this._buildQueue();
         this._buildOsd();
-        this._buildBattery();
+        this._buildEvent();
+        this._buildCall();
         this._buildDone();
         this._syncTimerRows();
         if (!this._state) {
@@ -424,9 +449,18 @@ class Island extends St.Widget {
 
         const top = new St.BoxLayout({style_class: 'li-row'});
         this._clockLabel = label('', 'li-clock');
-        this._dateLabel = label('', 'li-date', {x_expand: true, x_align: Clutter.ActorAlign.END});
+        const side = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, x_expand: true, y_align: Clutter.ActorAlign.CENTER, style_class: 'li-clock-side'});
+        this._dateLabel = label('', 'li-date', {x_align: Clutter.ActorAlign.END});
+        const weather = new St.BoxLayout({x_align: Clutter.ActorAlign.END, style_class: 'li-weather'});
+        this._weatherIcon = this._icon('weather-clear-symbolic', 14, 'li-dim-icon');
+        this._weatherLabel = label('', 'li-date');
+        weather.add_child(this._weatherIcon);
+        weather.add_child(this._weatherLabel);
+        this._weatherBox = weather;
+        side.add_child(this._dateLabel);
+        side.add_child(weather);
         top.add_child(this._clockLabel);
-        top.add_child(this._dateLabel);
+        top.add_child(side);
         top.add_child(this._bellButton());
         top.add_child(this._iconButton('emblem-system-symbolic', 'li-small-btn', 14, () => {
             this._collapse();
@@ -437,6 +471,7 @@ class Island extends St.Widget {
         // Preset buttons when no timer runs, controls when one does.
         this._presetRow = new St.BoxLayout({style_class: 'li-row li-presets', x_expand: true});
         this._timerRow = new St.BoxLayout({style_class: 'li-row', x_expand: true});
+        this._timerRowIcon = this._icon('alarm-symbolic', 18, 'li-dim-icon');
         this._timerRowLabel = label('', 'li-timer-big', {x_expand: true});
         this._timerPauseBtn = this._iconButton('media-playback-pause-symbolic', 'li-round-btn', 16, () => {
             if (this._timer.paused)
@@ -444,16 +479,75 @@ class Island extends St.Widget {
             else
                 this._timer.pause();
         });
-        this._timerRow.add_child(this._icon('alarm-symbolic', 18, 'li-dim-icon'));
+        this._timerRow.add_child(this._timerRowIcon);
         this._timerRow.add_child(this._timerRowLabel);
         this._timerRow.add_child(this._timerPauseBtn);
-        this._timerRow.add_child(this._iconButton('process-stop-symbolic', 'li-round-btn', 16, () => this._timer.stop()));
+        this._timerRow.add_child(this._iconButton('process-stop-symbolic', 'li-round-btn', 16, () => {
+            if (this._x.pomodoro.active)
+                this._x.pomodoro.stop();
+            else
+                this._timer.stop();
+        }));
         box.add_child(this._presetRow);
         box.add_child(this._timerRow);
         this._rebuildPresets();
         this._settings.connectObject('changed::timer-presets', () => this._rebuildPresets(), this);
 
+        // Tools: pomodoro, stopwatch, focus mode, and what's next.
+        const tools = new St.BoxLayout({style_class: 'li-row li-tools', x_expand: true});
+        this._pomodoroChip = this._textButton('🍅 Pomodoro', 'li-chip', () => {
+            if (this._x.pomodoro.active)
+                this._x.pomodoro.stop();
+            else
+                this._x.pomodoro.start();
+        });
+        this._stopwatchChip = this._textButton('⏱ Stopwatch', 'li-chip', () => this._x.stopwatch.toggle());
+        this._stopwatchReset = this._iconButton('edit-undo-symbolic', 'li-small-btn', 12, () => this._x.stopwatch.reset());
+        this._focusChip = this._textButton('🌙 Focus', 'li-chip', () => {
+            const on = this._x.focus.toggle();
+            this._showEvent({
+                iconName: 'weather-clear-night-symbolic',
+                title: 'Do Not Disturb',
+                value: on ? 'On' : 'Off',
+                valueClass: on ? 'li-value-focus' : '',
+            });
+        });
+        this._nextLabel = label('', 'li-next', {x_expand: true, x_align: Clutter.ActorAlign.END});
+        tools.add_child(this._pomodoroChip);
+        tools.add_child(this._stopwatchChip);
+        tools.add_child(this._stopwatchReset);
+        tools.add_child(this._focusChip);
+        tools.add_child(this._nextLabel);
+        box.add_child(tools);
+
         this._addView('idle-open', box);
+    }
+
+    _syncTools() {
+        const {pomodoro, stopwatch, focus, calendar, alarms} = this._x;
+        this._pomodoroChip.label = pomodoro.active ? '🍅 Stop' : '🍅 Pomodoro';
+        this._pomodoroChip.style_class = `li-btn li-chip${pomodoro.active ? ' li-chip-tomato' : ''}`;
+        this._stopwatchChip.label = stopwatch.active ? `⏱ ${formatStopwatch(stopwatch.elapsed)}` : '⏱ Stopwatch';
+        this._stopwatchChip.style_class = `li-btn li-chip${stopwatch.running ? ' li-chip-on' : ''}`;
+        this._stopwatchReset.visible = stopwatch.active && !stopwatch.running;
+        this._focusChip.style_class = `li-btn li-chip${focus.active ? ' li-chip-focus' : ''}`;
+
+        const parts = [];
+        const event = calendar.next;
+        if (event) {
+            const time = GLib.DateTime.new_from_unix_local(Math.floor(event.date.getTime() / 1000)).format('%H:%M');
+            parts.push(`📅 ${time} ${event.summary}`);
+        }
+        if (alarms.next)
+            parts.push(`⏰ ${alarms.next}`);
+        this._nextLabel.text = parts.join('   ');
+
+        const showWeather = this._settings.get_boolean('show-weather') && this._x.weather.text;
+        this._weatherBox.visible = !!showWeather;
+        if (showWeather) {
+            this._weatherLabel.text = this._x.weather.text;
+            this._weatherIcon.icon_name = this._x.weather.iconName;
+        }
     }
 
     _rebuildPresets() {
@@ -468,12 +562,18 @@ class Island extends St.Widget {
         }
     }
 
+    // Compact "live activity": recording, call, pomodoro, timer, stopwatch.
     _buildTimer() {
         const box = new St.BoxLayout({style_class: 'li-view li-compact'});
-        box.add_child(this._icon('alarm-symbolic', 15, 'li-accent-icon'));
-        this._timerLabel = label('', 'li-timer-small', {x_expand: true, x_align: Clutter.ActorAlign.END});
-        box.add_child(this._timerLabel);
-        this._addView('timer', box);
+        this._liveIcon = this._icon('alarm-symbolic', 15);
+        this._liveLabel = label('', 'li-live-label', {x_expand: true});
+        this._liveValue = label('', 'li-timer-small');
+        this._liveStop = this._iconButton('media-playback-stop-symbolic', 'li-small-btn li-rec-stop', 12, () => this._x.privacy.stopRecording());
+        box.add_child(this._liveIcon);
+        box.add_child(this._liveLabel);
+        box.add_child(this._liveValue);
+        box.add_child(this._liveStop);
+        this._addView('live', box);
     }
 
     _buildMedia() {
@@ -482,6 +582,7 @@ class Island extends St.Widget {
         this._miniTitle = label('', 'li-mini-title', {x_expand: true});
         this._miniEq = new Equalizer(this._px(14), this._px(3));
         this._miniTimer = label('', 'li-timer-small');
+        this._miniTimer.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
         box.add_child(this._miniCover);
         box.add_child(this._miniTitle);
         box.add_child(this._miniTimer);
@@ -692,23 +793,229 @@ class Island extends St.Widget {
         this._addView('osd', box);
     }
 
-    _buildBattery() {
+    // Short system events: battery, Bluetooth, clipboard, meetings, focus.
+    _buildEvent() {
         const box = new St.BoxLayout({style_class: 'li-view li-compact li-osd'});
-        this._batteryIcon = new St.Icon({icon_size: this._px(18), y_align: Clutter.ActorAlign.CENTER});
-        this._batteryLabel = label('', 'li-osd-label', {x_expand: true});
-        this._batteryValue = label('', 'li-battery-value');
-        box.add_child(this._batteryIcon);
-        box.add_child(this._batteryLabel);
-        box.add_child(this._batteryValue);
-        this._addView('battery', box);
+        this._eventIcon = new St.Icon({icon_size: this._px(18), y_align: Clutter.ActorAlign.CENTER});
+        this._eventLabel = label('', 'li-osd-label', {x_expand: true});
+        this._eventValue = label('', 'li-event-value');
+        this._eventValue.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
+        box.add_child(this._eventIcon);
+        box.add_child(this._eventLabel);
+        box.add_child(this._eventValue);
+        this._addView('event', box);
+    }
+
+    // Incoming phone call (GSConnect).
+    _buildCall() {
+        const box = new St.BoxLayout({style_class: 'li-view li-call'});
+        this._callIcon = new St.Icon({icon_size: this._px(44), style_class: 'li-call-avatar', y_align: Clutter.ActorAlign.CENTER});
+        const text = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, x_expand: true, y_align: Clutter.ActorAlign.CENTER});
+        this._callName = label('', 'li-call-name');
+        this._callSub = label('Incoming call', 'li-call-sub');
+        text.add_child(this._callName);
+        text.add_child(this._callSub);
+        this._callMute = this._iconButton('audio-volume-muted-symbolic', 'li-round-btn li-call-mute', 18, () => {
+            const mute = this._current?.actions[0];
+            mute?.activate();
+            this._callSub.text = 'Muted';
+        });
+        this._callDismiss = this._iconButton('window-close-symbolic', 'li-round-btn', 16, () => this._nextNotification());
+        box.add_child(this._callIcon);
+        box.add_child(text);
+        box.add_child(this._callMute);
+        box.add_child(this._callDismiss);
+        this._addView('call', box);
     }
 
     _buildDone() {
         const box = new St.BoxLayout({style_class: 'li-view li-compact li-done'});
-        box.add_child(this._icon('alarm-symbolic', 22, 'li-accent-icon'));
-        box.add_child(label("Time's up", 'li-done-label', {x_expand: true}));
+        this._doneIcon = this._icon('alarm-symbolic', 22, 'li-accent-icon');
+        const text = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, x_expand: true, y_align: Clutter.ActorAlign.CENTER});
+        this._doneTitle = label("Time's up", 'li-done-label');
+        this._doneSub = label('', 'li-notif-app');
+        text.add_child(this._doneTitle);
+        text.add_child(this._doneSub);
+        box.add_child(this._doneIcon);
+        box.add_child(text);
         box.add_child(label('click to dismiss', 'li-notif-app'));
         this._addView('done', box);
+    }
+
+    // Tiny coloured dots right of the island while the microphone (orange),
+    // camera (green) or screen recording (red) is in use.
+    _buildPrivacyDots() {
+        this._privacy?.destroy();
+        // Fixed layout: the uiGroup gives loose actors no allocation of their own.
+        const dots = new St.Widget({style_class: 'li-privacy', reactive: false, opacity: 0});
+        const dot = cls => {
+            const d = new St.Widget({style_class: `li-pdot ${cls}`, visible: false});
+            d.set_size(this._px(7), this._px(7));
+            dots.add_child(d);
+            return d;
+        };
+        this._dotRec = dot('li-pdot-rec');
+        this._dotMic = dot('li-pdot-mic');
+        this._dotCam = dot('li-pdot-cam');
+        this._privacyX = new Clutter.SnapConstraint({source: this, from_edge: Clutter.SnapEdge.LEFT, to_edge: Clutter.SnapEdge.RIGHT, offset: this._px(6)});
+        this._privacyY = new Clutter.SnapConstraint({source: this, from_edge: Clutter.SnapEdge.TOP, to_edge: Clutter.SnapEdge.TOP, offset: 0});
+        dots.add_constraint(this._privacyX);
+        dots.add_constraint(this._privacyY);
+        Main.layoutManager.uiGroup.insert_child_above(dots, this);
+        this.bind_property('visible', dots, 'visible', GObject.BindingFlags.SYNC_CREATE);
+        this._privacy = dots;
+        this._syncPrivacy();
+    }
+
+    _syncPrivacy() {
+        if (!this._privacy)
+            return;
+        const p = this._x.privacy;
+        const show = this._settings.get_boolean('show-privacy');
+        this._dotRec.visible = show && p.recording;
+        this._dotMic.visible = show && p.mic;
+        this._dotCam.visible = show && p.camera;
+        const shown = [this._dotRec, this._dotMic, this._dotCam].filter(d => d.visible);
+        const size = this._px(7), gap = this._px(4);
+        shown.forEach((d, i) => d.set_position(i * (size + gap), 0));
+        this._privacy.set_size(Math.max(1, shown.length * (size + gap) - gap), size);
+        const any = shown.length > 0;
+        const [, h] = this._size(this._state ?? 'idle');
+        this._privacyY.offset = Math.round((Math.min(h, this._px(36)) - this._px(7)) / 2);
+        const hidden = this.opacity === 0 && !this.reactive;
+        this._privacy.ease({opacity: any && !hidden ? 255 : 0, duration: 200});
+    }
+
+    // ---- extra sources -----------------------------------------------------
+
+    _connectExtras() {
+        const {bluetooth, privacy, clipboard, calendar, weather, focus, stopwatch, pomodoro, alarms} = this._x;
+        bluetooth.connectObject('event', (_b, ev) => {
+            if (!this._settings.get_boolean('show-bluetooth'))
+                return;
+            const connected = ev.kind === 'bt-connected';
+            this._showEvent({
+                iconName: ev.iconName,
+                title: ev.name,
+                value: connected ? (ev.percent !== null ? `${ev.percent}%` : 'Connected') : 'Disconnected',
+                valueClass: connected ? (ev.percent !== null && ev.percent <= 20 ? 'li-battery-low' : 'li-battery-ok') : '',
+            });
+        }, this);
+        privacy.connectObject('changed', () => {
+            this._syncPrivacy();
+            this._syncLive();
+            this._update();
+        }, this);
+        clipboard.connectObject('copied', (_c, {text, image}) => {
+            if (!this._settings.get_boolean('clipboard-peek'))
+                return;
+            const preview = image ? 'Image' : text.replace(/\s+/g, ' ').trim().slice(0, 80);
+            this._showEvent({iconName: 'edit-copy-symbolic', title: preview, value: 'Copied', valueClass: 'li-value-dim', duration: 1600});
+        }, this);
+        calendar.connectObject(
+            'reminder', (_c, ev) => {
+                this._showEvent({
+                    iconName: 'x-office-calendar-symbolic',
+                    title: ev.summary,
+                    value: ev.minutes > 0 ? `in ${ev.minutes} min` : 'now',
+                    valueClass: 'li-value-cal',
+                    duration: 10000,
+                    onClick: () => calendar.openCalendar(),
+                });
+                global.display.get_sound_player().play_from_theme('message-new-instant', 'Meeting', null);
+            },
+            'changed', () => this._syncToolsIfOpen(), this);
+        weather.connectObject('changed', () => this._syncToolsIfOpen(), this);
+        this._focusId = focus.connect(() => this._syncToolsIfOpen());
+        stopwatch.connectObject('changed', () => {
+            this._syncToolsIfOpen();
+            this._syncLive();
+            this._update();
+        }, this);
+        pomodoro.connectObject(
+            'changed', () => {
+                this._syncToolsIfOpen();
+                this._syncTimerRows();
+                this._update();
+            },
+            'phase-done', (_p, {next, minutes}) => {
+                const focusNext = next === 'focus';
+                this._showDone({
+                    iconName: focusNext ? 'alarm-symbolic' : 'weather-clear-symbolic',
+                    title: focusNext ? 'Back to focus' : next === 'long-break' ? 'Long break' : 'Break time',
+                    subtitle: `${minutes} min`,
+                    color: focusNext ? 'tomato' : 'green',
+                    sound: 'complete',
+                    timeout: 8000,
+                });
+            }, this);
+        alarms.connectObject('ring', (_a, {time}) => {
+            this._showDone({
+                iconName: 'alarm-symbolic',
+                title: 'Alarm',
+                subtitle: time,
+                color: 'orange',
+                sound: 'alarm-clock-elapsed',
+                repeat: true,
+                timeout: 60000,
+            });
+        }, this);
+        this._settings.connectObject('changed::alarms', () => this._syncToolsIfOpen(), this);
+    }
+
+    _syncToolsIfOpen() {
+        if (this._state === 'idle-open')
+            this._syncTools();
+    }
+
+    // What the compact "live" view shows, most important first.
+    _liveInfo() {
+        const {privacy, pomodoro, stopwatch} = this._x;
+        const now = GLib.get_monotonic_time();
+        if (privacy.recording) {
+            return {icon: 'media-record-symbolic', text: 'Recording', value: formatTime((now - privacy.recordingStart) / 1000),
+                color: 'rec', stop: true};
+        }
+        if (this._call) {
+            return {icon: 'call-start-symbolic', text: this._call.name, value: formatTime((now - this._call.start) / 1000),
+                color: 'call'};
+        }
+        if (this._timer.running) {
+            if (pomodoro.active) {
+                const label = pomodoro.phase === 'focus' ? `Focus ${pomodoro.round % pomodoro.rounds + 1}/${pomodoro.rounds}` : 'Break';
+                return {icon: null, text: `🍅 ${label}`, value: formatTime(this._timer.remaining),
+                    color: pomodoro.phase === 'focus' ? 'tomato' : 'green'};
+            }
+            return {icon: 'alarm-symbolic', text: '', value: formatTime(this._timer.remaining), color: 'orange'};
+        }
+        if (stopwatch.running)
+            return {icon: null, text: '⏱', value: formatStopwatch(stopwatch.elapsed), color: 'white'};
+        return null;
+    }
+
+    _syncLive() {
+        const info = this._liveInfo();
+        const color = info ? `li-live-${info.color}` : '';
+        this._liveIcon.visible = !!info?.icon;
+        if (info?.icon)
+            this._liveIcon.icon_name = info.icon;
+        this._liveIcon.style_class = color;
+        this._liveLabel.text = info?.text ?? '';
+        this._liveValue.text = info?.value ?? '';
+        this._liveValue.style_class = `li-timer-small ${color}`;
+        this._liveStop.visible = !!info?.stop;
+        // Media keeps its own view; the live value sits at its right.
+        this._miniTimer.text = info ? (info.text && info.color === 'rec' ? `● ${info.value}` : info.value) : '';
+        this._miniTimer.style_class = `li-timer-small ${color}`;
+        this._miniTimer.visible = !!info;
+        this._miniEq.visible = !info;
+    }
+
+    _onBattery(ev) {
+        if (!this._settings.get_boolean('show-battery'))
+            return;
+        const color = ev.kind === 'low' ? 'li-battery-low' : ev.kind === 'unplugged' ? '' : 'li-battery-ok';
+        this._showEvent({iconName: ev.iconName, title: BATTERY_TEXT[ev.kind] ?? '', value: `${ev.percent}%`, valueClass: color, iconClass: color});
     }
 
     // ---- state machine -----------------------------------------------------
@@ -718,14 +1025,16 @@ class Island extends St.Widget {
     }
 
     _computeState() {
-        if (this._timerDone)
+        if (this._done)
             return 'done';
+        if (this._current && phoneKind(this._current) === 'call')
+            return 'call';
         if (this._current)
             return this._expanded || this._replying ? 'notification-open' : 'notification';
         if (this._osd)
             return 'osd';
         if (this._event)
-            return 'battery';
+            return 'event';
         if (this._listOpen)
             return 'list';
         if (this._queueOpen && this._hasMedia())
@@ -736,8 +1045,8 @@ class Island extends St.Widget {
             return this._expanded ? 'media-open' : 'media';
         if (this._expanded)
             return 'idle-open';
-        if (this._timer.running)
-            return 'timer';
+        if (this._liveInfo())
+            return 'live';
         return 'idle';
     }
 
@@ -797,10 +1106,12 @@ class Island extends St.Widget {
 
     // Refresh the contents of the view for @state.
     _syncState(state) {
-        if (state === 'idle-open')
+        if (state === 'idle-open') {
             this._syncClock();
-        if (state === 'timer' || state === 'idle-open' || state === 'media')
-            this._syncTimer();
+            this._syncTools();
+        }
+        if (state === 'live' || state === 'idle-open' || state === 'media')
+            this._syncLive();
         if (state === 'media' || state === 'media-open')
             this._syncMedia();
         if (state === 'list')
@@ -815,6 +1126,7 @@ class Island extends St.Widget {
         this.ease({opacity: hidden ? 0 : 255, duration: this._ms(150), mode: Clutter.AnimationMode.EASE_OUT_QUAD});
         if (this._views)
             this._updateTickers();
+        this._syncPrivacy();
     }
 
     _setSuspended(suspended) {
@@ -869,10 +1181,24 @@ class Island extends St.Widget {
         if (this._state === 'idle-open') {
             this._setTimeout('clock', 1000, () => {
                 this._syncClock();
+                this._syncTools();
                 return GLib.SOURCE_CONTINUE;
             });
         } else {
             this._clearTimeout('clock');
+        }
+
+        // Live values that change every second (stopwatch, call, recording).
+        const ticking = this._x.stopwatch.running || this._x.privacy.recording || this._call;
+        if (ticking && ['live', 'media', 'idle-open'].includes(this._state)) {
+            this._setTimeout('live', 500, () => {
+                this._syncLive();
+                if (this._state === 'idle-open')
+                    this._syncTools();
+                return GLib.SOURCE_CONTINUE;
+            });
+        } else {
+            this._clearTimeout('live');
         }
     }
 
@@ -905,7 +1231,8 @@ class Island extends St.Widget {
     // ---- geometry & style --------------------------------------------------
 
     _relayout() {
-        const monitor = Main.layoutManager.primaryMonitor;
+        const index = this._settings.get_int('monitor');
+        const monitor = Main.layoutManager.monitors[index] ?? Main.layoutManager.primaryMonitor;
         if (!monitor)
             return;
         const panel = Main.layoutManager.panelBox;
@@ -934,7 +1261,9 @@ class Island extends St.Widget {
         let shadow = '';
         const playing = this._mpris.active?.status === 'Playing';
         if (glow && this._state === 'done')
-            shadow = `box-shadow: 0 0 ${this._px(22)}px 2px ${rgba([255, 159, 67], 0.55)};`;
+            shadow = `box-shadow: 0 0 ${this._px(22)}px 2px ${rgba(DONE_COLORS[this._done?.color] ?? DONE_COLORS.orange, 0.55)};`;
+        else if (glow && this._state === 'call')
+            shadow = `box-shadow: 0 0 ${this._px(22)}px 2px ${rgba([52, 199, 89], 0.5)};`;
         else if (glow && this._state?.startsWith('media') && playing && this._settings.get_boolean('glow'))
             shadow = `box-shadow: 0 2px ${this._px(18)}px 0 ${rgba(this._accent, 0.32)};`;
         this.style = `font-size: ${(13 * this._scale).toFixed(2)}px; border-radius: ${radius}px; ${shadow}`;
@@ -1058,28 +1387,53 @@ class Island extends St.Widget {
     }
 
     _syncTimer() {
-        const text = this._timer.running ? formatTime(this._timer.remaining) : '';
-        this._timerLabel.text = text;
+        const pomodoro = this._x.pomodoro;
+        let text = this._timer.running ? formatTime(this._timer.remaining) : '';
+        if (text && pomodoro.active)
+            text = `🍅 ${pomodoro.phase === 'focus' ? 'Focus' : 'Break'}  ${text}`;
         this._timerRowLabel.text = text;
-        this._miniTimer.text = text;
-        this._miniTimer.visible = text !== '';
-        this._miniEq.visible = text === '';
+        this._syncLive();
     }
 
     _onTimerDone() {
-        this._timerDone = true;
-        global.display.get_sound_player().play_from_theme('alarm-clock-elapsed', "Time's up", null);
-        this._restartTimeout('done', 20000, () => this._dismissDone());
+        if (this._x.pomodoro.active)
+            return; // the pomodoro announces its own phase change
+        this._showDone({iconName: 'alarm-symbolic', title: "Time's up", subtitle: '', color: 'orange',
+            sound: 'alarm-clock-elapsed', timeout: 20000});
+    }
+
+    // A big, glowing announcement that stays until clicked or @timeout.
+    _showDone({iconName, title, subtitle, color, sound, repeat = false, timeout = 20000}) {
+        this._done = {color};
+        this._doneIcon.icon_name = iconName;
+        this._doneIcon.style_class = `li-live-${color}`;
+        this._doneTitle.text = title;
+        this._doneSub.text = subtitle ?? '';
+        this._doneSub.visible = !!subtitle;
+        const play = () => global.display.get_sound_player().play_from_theme(sound, title, null);
+        play();
+        if (repeat) {
+            this._clearTimeout('done-sound');
+            this._setTimeout('done-sound', 4000, () => {
+                play();
+                return GLib.SOURCE_CONTINUE;
+            });
+        }
+        this._restartTimeout('done', timeout, () => this._dismissDone());
         this._update();
+        this._restyle();
     }
 
     _dismissDone() {
         this._clearTimeout('done');
-        this._timerDone = false;
+        this._clearTimeout('done-sound');
+        this._done = null;
         this._update();
     }
 
     _syncClock() {
+        if (!this._clockLabel)
+            return;
         const now = GLib.DateTime.new_now_local();
         this._clockLabel.text = now.format('%H:%M');
         this._dateLabel.text = now.format('%a %-d %b');
@@ -1108,17 +1462,17 @@ class Island extends St.Widget {
         this._update();
     }
 
-    _showEvent(ev) {
-        if (!this._settings.get_boolean('show-battery'))
-            return;
-        this._event = ev;
-        this._batteryIcon.icon_name = ev.iconName;
-        this._batteryLabel.text = BATTERY_TEXT[ev.kind] ?? '';
-        this._batteryValue.text = `${ev.percent}%`;
-        const color = ev.kind === 'low' ? 'li-battery-low' : ev.kind === 'unplugged' ? '' : 'li-battery-ok';
-        this._batteryValue.style_class = `li-battery-value ${color}`;
-        this._batteryIcon.style_class = color;
-        this._restartTimeout('event', EVENT_TIME, () => {
+    _showEvent({iconName, gicon, title, value, valueClass = '', iconClass = '', duration = EVENT_TIME, onClick = null}) {
+        this._event = {onClick};
+        if (gicon)
+            this._eventIcon.gicon = gicon;
+        else
+            this._eventIcon.icon_name = iconName;
+        this._eventIcon.style_class = iconClass;
+        this._eventLabel.text = title ?? '';
+        this._eventValue.text = value ?? '';
+        this._eventValue.style_class = `li-event-value ${valueClass}`;
+        this._restartTimeout('event', duration, () => {
             this._event = null;
             this._update();
         });
@@ -1128,6 +1482,33 @@ class Island extends St.Widget {
     // ---- notifications -----------------------------------------------------
 
     _enqueue(n) {
+        const kind = phoneKind(n);
+        if (kind && !this._settings.get_boolean('show-phone'))
+            return;
+        // An answered call becomes a live activity, not a banner.
+        if (kind === 'ongoing') {
+            this._call = {name: stripMarkup(n.title), start: GLib.get_monotonic_time()};
+            n.connectObject('destroy', () => {
+                this._call = null;
+                this._syncLive();
+                this._update();
+            }, this);
+            this._queue.filter(q => phoneKind(q) === 'call').forEach(q => this._dropNotification(q));
+            if (phoneKind(this._current) === 'call')
+                this._nextNotification();
+            this._syncLive();
+            this._update();
+            return;
+        }
+        // A ringing phone jumps the queue; what was showing comes back after.
+        if (kind === 'call' && this._current && this._current !== n && !this._queue.includes(n)) {
+            this._queue.unshift(this._current);
+            this._current = null;
+            n.connectObject('destroy', () => this._dropNotification(n), this);
+            this._queue.unshift(n);
+            this._nextNotification();
+            return;
+        }
         if (n === this._current) {
             this._syncNotification(); // updated: refresh and extend
             this._scheduleNotificationEnd();
@@ -1146,7 +1527,8 @@ class Island extends St.Widget {
     _nextNotification() {
         if (this._replying)
             this._endReply();
-        this._current?.disconnectObject(this);
+        if (!this._queue.includes(this._current))
+            this._current?.disconnectObject(this);
         this._current = this._queue.shift() ?? null;
         this._expanded = false;
         if (this._current) {
@@ -1178,9 +1560,16 @@ class Island extends St.Widget {
         this._bigNotifBody.text = body;
         this._bigNotifIcon.gicon = icon;
 
+        if (phoneKind(n) === 'call') {
+            this._callName.text = title || app;
+            this._callSub.text = 'Incoming call';
+            this._callIcon.gicon = n.gicon ?? new Gio.ThemedIcon({name: 'call-start-symbolic'});
+            this._callMute.visible = n.actions.length > 0;
+        }
+
         this._actionRow.destroy_all_children();
-        const canReply = this._reply.canReply(n);
-        console.log(`linux-island: notification from app=${n.source?.app?.get_id() ?? '-'} title=${app} reply=${canReply} actions=${n.actions.map(a => a.label).join('|')}`);
+        const canReply = canReplyViaPhone(n) || this._reply.canReply(n);
+        console.log(`linux-island: notification from app=${sourceApp(n.source)?.get_id() ?? '-'} title=${app} reply=${canReply} actions=${n.actions.map(a => a.label).join('|')}`);
         if (canReply)
             this._actionRow.add_child(this._textButton('Reply', 'li-chip li-chip-accent', () => this._startReply()));
         // The app's own "Reply" just opens the window; ours replaces it.
@@ -1205,6 +1594,11 @@ class Island extends St.Widget {
     }
 
     _scheduleNotificationEnd() {
+        // A ringing call stays until it stops ringing or is dismissed.
+        if (phoneKind(this._current) === 'call') {
+            this._clearTimeout('notification');
+            return;
+        }
         const secs = this._settings.get_int('notification-duration');
         this._restartTimeout('notification', secs * 1000, () => {
             if (this.hover || this._replying)
@@ -1257,13 +1651,25 @@ class Island extends St.Widget {
         n.disconnectObject(this);
         this._endReply();
         this._nextNotification();
+        if (canReplyViaPhone(n)) {
+            const sent = replyViaPhone(n, text);
+            console.log(`linux-island: reply: via phone (${sent ? 'sent' : 'failed'})`);
+            this._showOsd({
+                icon: new Gio.ThemedIcon({name: sent ? 'phone-symbolic' : 'dialog-warning-symbolic'}),
+                label: sent ? 'Sent from your phone' : 'Could not reach your phone',
+                level: null,
+            });
+            return;
+        }
         let result;
+        this._x.clipboard.muted = true; // the reply goes through the clipboard
         try {
             result = await this._reply.send(n, text);
         } catch (e) {
             console.error(`linux-island: reply failed: ${e.message}`);
             result = 'copied';
         }
+        this._restartTimeout('clipboard-unmute', 800, () => (this._x.clipboard.muted = false));
         this._showOsd({
             icon: new Gio.ThemedIcon({name: result === 'sent' ? 'mail-send-symbolic' : 'edit-paste-symbolic'}),
             label: result === 'sent' ? 'Reply sent' : 'Reply copied – paste it with Ctrl+V',
@@ -1473,13 +1879,18 @@ class Island extends St.Widget {
                 this._nextNotification();
             break;
         case 'osd':
-        case 'battery':
+        case 'event': {
+            const onClick = this._event?.onClick;
             this._osd = null;
             this._event = null;
             this._update();
+            onClick?.();
+            break;
+        }
+        case 'call':
             break;
         case 'idle':
-        case 'timer':
+        case 'live':
         case 'media':
             if (button === Clutter.BUTTON_SECONDARY)
                 this._openList();
@@ -1578,6 +1989,10 @@ class Island extends St.Widget {
     _onDestroy() {
         this._aura?.destroy();
         this._aura = null;
+        this._privacy?.destroy();
+        this._privacy = null;
+        if (this._focusId)
+            this._x.focus.disconnect(this._focusId);
         if (this._grab)
             Main.popModal(this._grab);
         this._grab = null;

@@ -12,6 +12,8 @@ import St from 'gi://St';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
+import {sourceApp} from './phone.js';
+
 const RAISE_AFTER = 1200;
 const FOCUS_TIMEOUT = 5000;
 const SETTLE_TIME = 450;   // let the chat view open and focus its input
@@ -26,7 +28,7 @@ function sleep(ms) {
 }
 
 function appKey(source) {
-    const id = source?.app?.get_id?.() ?? '';
+    const id = sourceApp(source)?.get_id?.() ?? '';
     return (id || source?.title || '').toLowerCase().replace(/\.desktop$/, '');
 }
 
@@ -49,7 +51,7 @@ export class QuickReply {
         if (!window)
             return false;
         const app = Shell.WindowTracker.get_default().get_window_app(window);
-        if (n.source?.app && app === n.source.app)
+        if (sourceApp(n.source) && app === sourceApp(n.source))
             return true;
         const key = appKey(n.source);
         const winKey = [app?.get_id(), window.get_wm_class(), window.get_gtk_application_id()]
@@ -109,7 +111,7 @@ export class QuickReply {
                 if (window)
                     Main.activateWindow(window);
                 else
-                    n.source?.app?.activate();
+                    sourceApp(n.source)?.activate();
             }
             if (elapsed > FOCUS_TIMEOUT) {
                 log(`gave up: focus stayed on ${global.display.focus_window?.get_wm_class()}`);

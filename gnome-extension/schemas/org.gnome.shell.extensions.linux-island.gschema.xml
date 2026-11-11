@@ -53,6 +53,60 @@
       <default>true</default>
       <summary>Soft glow in the cover-art colour while music plays</summary>
     </key>
+    <key name="show-phone" type="b">
+      <default>true</default>
+      <summary>Phone calls and messages from GSConnect</summary>
+    </key>
+    <key name="show-bluetooth" type="b">
+      <default>true</default>
+      <summary>Bluetooth devices connecting, with battery level</summary>
+    </key>
+    <key name="show-privacy" type="b">
+      <default>true</default>
+      <summary>Dots while the microphone, camera or screen recording is in use</summary>
+    </key>
+    <key name="clipboard-peek" type="b">
+      <default>true</default>
+      <summary>Show what was copied</summary>
+    </key>
+    <key name="meeting-reminder" type="i">
+      <range min="0" max="60"/>
+      <default>5</default>
+      <summary>Remind about calendar events this many minutes before (0 = off)</summary>
+    </key>
+    <key name="show-weather" type="b">
+      <default>true</default>
+      <summary>Weather in the clock view</summary>
+    </key>
+    <key name="pomodoro-focus" type="i">
+      <range min="1" max="180"/>
+      <default>25</default>
+      <summary>Pomodoro focus minutes</summary>
+    </key>
+    <key name="pomodoro-break" type="i">
+      <range min="1" max="60"/>
+      <default>5</default>
+      <summary>Pomodoro break minutes</summary>
+    </key>
+    <key name="pomodoro-long-break" type="i">
+      <range min="1" max="90"/>
+      <default>15</default>
+      <summary>Pomodoro long break minutes</summary>
+    </key>
+    <key name="pomodoro-rounds" type="i">
+      <range min="2" max="10"/>
+      <default>4</default>
+      <summary>Focus sessions before a long break</summary>
+    </key>
+    <key name="alarms" type="as">
+      <default>[]</default>
+      <summary>Daily alarms as HH:MM</summary>
+    </key>
+    <key name="monitor" type="i">
+      <range min="-1" max="9"/>
+      <default>-1</default>
+      <summary>Monitor for the island (-1 = primary)</summary>
+    </key>
     <key name="hide-when-idle" type="b">
       <default>false</default>
       <summary>Hide the island completely when nothing is happening</summary>

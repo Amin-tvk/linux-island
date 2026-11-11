@@ -120,3 +120,36 @@
 .li-tabs { spacing: 0.3em; }
 .li-chip-on { background-color: rgba(255, 255, 255, 0.24); }
 .li-queue-index { font-size: 0.85em; color: rgba(255, 255, 255, 0.4); font-feature-settings: "tnum"; }
+
+.li-clock-side { spacing: 0.15em; padding-right: 0.3em; }
+.li-weather { spacing: 0.3em; }
+.li-tools { spacing: 0.38em; padding-top: 0.15em; }
+.li-tools .li-chip { padding: 0.3em 0.7em; font-size: 0.85em; }
+.li-next { font-size: 0.81em; color: rgba(255, 255, 255, 0.55); }
+.li-chip-tomato { background-color: rgba(255, 99, 71, 0.35); }
+.li-chip-focus { background-color: rgba(142, 116, 255, 0.45); }
+
+.li-live-label { font-size: 0.96em; font-weight: 600; }
+.li-live-orange { color: #ffb35c; }
+.li-live-tomato { color: #ff7a5c; }
+.li-live-green, .li-live-call { color: #4cd964; }
+.li-live-rec { color: #ff453a; }
+.li-live-white { color: #ffffff; }
+.li-rec-stop { padding: 0.3em; color: #ff453a; }
+
+.li-event-value { font-size: 0.96em; font-weight: 700; }
+.li-value-dim { color: rgba(255, 255, 255, 0.55); font-weight: 600; }
+.li-value-cal { color: #64d2ff; }
+.li-value-focus { color: #a99bff; }
+
+.li-call { padding: 0 1.08em 0 0.92em; spacing: 0.92em; }
+.li-call-avatar { border-radius: 99px; color: #4cd964; }
+.li-call-name { font-size: 1.23em; font-weight: 700; }
+.li-call-sub { font-size: 0.92em; color: #4cd964; }
+.li-call-mute { background-color: rgba(255, 255, 255, 0.14); }
+
+.li-privacy { spacing: 0.3em; }
+.li-pdot { border-radius: 99px; }
+.li-pdot-mic { background-color: #ff9f0a; }
+.li-pdot-cam { background-color: #30d158; }
+.li-pdot-rec { background-color: #ff453a; }

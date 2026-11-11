@@ -75,11 +75,28 @@ export default class LinuxIslandPreferences extends ExtensionPreferences {
         content.add(switchRow('show-battery', 'Charger and low battery'));
         page.add(content);
 
+        const phone = new Adw.PreferencesGroup({
+            title: 'Phone',
+            description: 'Incoming calls, SMS and phone notifications through GSConnect (KDE Connect for GNOME) and the KDE Connect app on your Android phone.',
+        });
+        phone.add(switchRow('show-phone', 'Calls and phone messages',
+            'Ringing calls get their own view with a Mute button; answered calls show a timer; replies go through your phone'));
+        page.add(phone);
+
+        const system = new Adw.PreferencesGroup({title: 'System'});
+        system.add(switchRow('show-bluetooth', 'Bluetooth devices', 'Headphones connecting, with their battery level'));
+        system.add(switchRow('show-privacy', 'Privacy dots', 'Orange: microphone, green: camera, red: screen recording'));
+        system.add(switchRow('clipboard-peek', 'Show what you copy', 'Password-manager copies are never shown'));
+        system.add(switchRow('show-weather', 'Weather in the clock view', 'Uses the location set in GNOME Weather'));
+        system.add(spinRow('meeting-reminder', 'Calendar reminder (minutes before, 0 = off)', 0, 60));
+        page.add(system);
+
         const behaviour = new Adw.PreferencesGroup({title: 'Behaviour'});
         behaviour.add(switchRow('expand-on-hover', 'Expand on hover'));
         behaviour.add(switchRow('scroll-volume', 'Scroll to change volume', 'Sideways scroll skips tracks'));
         behaviour.add(switchRow('hide-when-idle', 'Hide when idle', 'Use the shortcut to open the clock and timer'));
         behaviour.add(spinRow('notification-duration', 'Notification time (seconds)', 2, 30));
+        behaviour.add(spinRow('monitor', 'Monitor (-1 = primary)', -1, 9));
         page.add(behaviour);
 
         const extra = new Adw.PreferencesGroup({title: 'Timer and shortcuts'});
@@ -97,6 +114,20 @@ export default class LinuxIslandPreferences extends ExtensionPreferences {
         });
         extra.add(presets);
 
+        const alarms = new Adw.EntryRow({
+            title: 'Daily alarms, HH:MM (comma separated)',
+            text: settings.get_strv('alarms').join(', '),
+            show_apply_button: true,
+        });
+        alarms.connect('apply', () => {
+            const values = alarms.text.split(/[,\s]+/).filter(a => /^\d{1,2}:\d{2}$/.test(a))
+                .filter(a => Number(a.split(':')[0]) < 24 && Number(a.split(':')[1]) < 60)
+                .map(a => a.padStart(5, '0'));
+            settings.set_strv('alarms', [...new Set(values)].sort());
+            alarms.text = settings.get_strv('alarms').join(', ');
+        });
+        extra.add(alarms);
+
         const shortcutRow = (key, title) => {
             const row = new Adw.EntryRow({
                 title,
@@ -112,8 +143,15 @@ export default class LinuxIslandPreferences extends ExtensionPreferences {
             });
             return row;
         };
-        extra.add(shortcutRow('toggle-island', 'Open / close shortcut (e.g. <Super><Alt>h)'));
-        extra.add(shortcutRow('toggle-list', 'Notification list shortcut (e.g. <Super><Alt>n)'));
+        const pomodoro = new Adw.PreferencesGroup({title: 'Pomodoro'});
+        pomodoro.add(spinRow('pomodoro-focus', 'Focus (minutes)', 1, 180));
+        pomodoro.add(spinRow('pomodoro-break', 'Break (minutes)', 1, 60));
+        pomodoro.add(spinRow('pomodoro-long-break', 'Long break (minutes)', 1, 90));
+        pomodoro.add(spinRow('pomodoro-rounds', 'Focus sessions before a long break', 2, 10));
+
+        extra.add(shortcutRow('toggle-island', 'Open / close shortcut (e.g. &lt;Super&gt;&lt;Alt&gt;h)'));
+        extra.add(shortcutRow('toggle-list', 'Notification list shortcut (e.g. &lt;Super&gt;&lt;Alt&gt;n)'));
         page.add(extra);
+        page.add(pomodoro);
     }
 }

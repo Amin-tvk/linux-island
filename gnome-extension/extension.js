@@ -12,8 +12,11 @@ import {MprisWatcher} from './mpris.js';
 import {NotificationWatcher} from './notifications.js';
 import {QuickReply} from './reply.js';
 import {BatteryWatcher, OsdRedirect} from './system.js';
-import {Timer} from './timer.js';
+import {AlarmClock, Pomodoro, Stopwatch, Timer} from './timer.js';
 import {Spectrum} from './visualizer.js';
+import {
+    BluetoothWatcher, CalendarWatcher, ClipboardWatcher, FocusMode, PrivacyWatcher, WeatherWatcher,
+} from './watchers.js';
 
 export default class LinuxIslandExtension extends Extension {
     enable() {
@@ -26,6 +29,17 @@ export default class LinuxIslandExtension extends Extension {
         this._osd = new OsdRedirect(() => this._settings.get_boolean('replace-osd'));
         this._spectrum = new Spectrum();
         this._reply = new QuickReply(this._settings);
+        this._extras = {
+            bluetooth: new BluetoothWatcher(),
+            privacy: new PrivacyWatcher(),
+            clipboard: new ClipboardWatcher(),
+            calendar: new CalendarWatcher(this._settings),
+            weather: new WeatherWatcher(),
+            focus: new FocusMode(),
+            stopwatch: new Stopwatch(),
+            pomodoro: new Pomodoro(this._timer, this._settings),
+            alarms: new AlarmClock(this._settings),
+        };
         this._island = new Island({
             settings: this._settings,
             mpris: this._mpris,
@@ -36,6 +50,7 @@ export default class LinuxIslandExtension extends Extension {
             osd: this._osd,
             spectrum: this._spectrum,
             reply: this._reply,
+            extras: this._extras,
             openPrefs: () => this._openPrefs(),
         });
 
@@ -68,6 +83,9 @@ export default class LinuxIslandExtension extends Extension {
         Main.wm.removeKeybinding('toggle-list');
         this._island.destroy();
         this._island = null;
+        for (const watcher of Object.values(this._extras))
+            watcher.destroy?.();
+        this._extras = null;
         for (const name of ['_reply', '_spectrum', '_osd', '_battery', '_timer', '_notifications', '_mpris', '_art']) {
             this[name].destroy();
             this[name] = null;
