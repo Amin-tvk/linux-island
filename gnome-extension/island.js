@@ -278,6 +278,8 @@ class Island extends St.Widget {
 
         Main.layoutManager.addChrome(this, {trackFullscreen: true});
         this._aura = new Aura(this, spectrum, this._px(14));
+        // The shell may destroy these first when it shuts down.
+        this._aura.connect('destroy', () => (this._aura = null));
         this._buildPrivacyDots();
         spectrum.connectObject('levels', (_s, levels) => {
             if (this._state === 'media')
@@ -458,6 +460,14 @@ class Island extends St.Widget {
         weather.add_child(this._weatherIcon);
         weather.add_child(this._weatherLabel);
         this._weatherBox = weather;
+        this._phoneIcon = this._icon('phone-symbolic', 13, 'li-dim-icon');
+        this._phoneLabel = label('', 'li-date');
+        this._phoneCharge = this._icon('battery-full-charging-symbolic', 12, 'li-battery-ok');
+        this._phoneSignal = this._icon('network-cellular-signal-good-symbolic', 12, 'li-dim-icon');
+        weather.insert_child_at_index(this._phoneSignal, 0);
+        weather.insert_child_at_index(this._phoneCharge, 0);
+        weather.insert_child_at_index(this._phoneLabel, 0);
+        weather.insert_child_at_index(this._phoneIcon, 0);
         side.add_child(this._dateLabel);
         side.add_child(weather);
         top.add_child(this._clockLabel);
@@ -544,11 +554,31 @@ class Island extends St.Widget {
         this._nextLabel.text = parts.join('   ');
 
         const showWeather = this._settings.get_boolean('show-weather') && this._x.weather.text;
-        this._weatherBox.visible = !!showWeather;
+        this._weatherIcon.visible = this._weatherLabel.visible = !!showWeather;
         if (showWeather) {
             this._weatherLabel.text = this._x.weather.text;
             this._weatherIcon.icon_name = this._x.weather.iconName;
         }
+        // GSConnect knows more (charging, signal); Bluetooth only the level.
+        let phone = null;
+        if (this._settings.get_boolean('show-phone')) {
+            const gsc = this._x.gsconnect.phone;
+            const bt = this._x.phoneBattery.phones[0];
+            if (gsc && gsc.level >= 0)
+                phone = {percent: gsc.level, charging: gsc.charging, signalIcon: gsc.signalIcon};
+            else if (bt)
+                phone = {percent: bt.percent, charging: false, signalIcon: null};
+        }
+        this._phoneIcon.visible = this._phoneLabel.visible = !!phone;
+        this._phoneCharge.visible = !!phone?.charging;
+        this._phoneSignal.visible = !!phone?.signalIcon;
+        if (phone) {
+            this._phoneLabel.text = `${phone.percent}%`;
+            if (phone.signalIcon)
+                this._phoneSignal.icon_name = phone.signalIcon;
+        }
+        this._phoneSignal.style = showWeather ? `margin-right: ${this._px(10)}px;` : '';
+        this._weatherBox.visible = !!showWeather || !!phone;
     }
 
     _rebuildPresets() {
@@ -877,6 +907,10 @@ class Island extends St.Widget {
         dots.add_constraint(this._privacyY);
         Main.layoutManager.uiGroup.insert_child_above(dots, this);
         this.bind_property('visible', dots, 'visible', GObject.BindingFlags.SYNC_CREATE);
+        dots.connect('destroy', () => {
+            if (this._privacy === dots)
+                this._privacy = null;
+        });
         this._privacy = dots;
         this._syncPrivacy();
     }
@@ -976,6 +1010,21 @@ class Island extends St.Widget {
         }, this);
         this._settings.connectObject('changed::alarms', () => this._syncToolsIfOpen(), this);
         this._x.btCalls.connectObject('changed', () => this._onBtCalls(), this);
+        this._x.gsconnect.connectObject(
+            'changed', () => this._syncToolsIfOpen(),
+            'charging', (_w, {name, level}) => {
+                if (this._settings.get_boolean('show-phone'))
+                    this._showEvent({iconName: 'battery-good-charging-symbolic', title: `${name} charging`,
+                        value: `${level}%`, valueClass: 'li-battery-ok', iconClass: 'li-battery-ok'});
+            }, this);
+        this._x.phoneBattery.connectObject(
+            'changed', () => this._syncToolsIfOpen(),
+            'low', (_w, phone) => {
+                if (!this._settings.get_boolean('show-phone'))
+                    return;
+                this._showEvent({iconName: 'phone-symbolic', title: `${phone.model} battery low`,
+                    value: `${phone.percent}%`, valueClass: 'li-battery-low', duration: 5000});
+            }, this);
     }
 
     // Bluetooth calls; GSConnect's notifications for the same call are

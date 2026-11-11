@@ -16,7 +16,8 @@ import {AlarmClock, Pomodoro, Stopwatch, Timer} from './timer.js';
 import {BluetoothCalls} from './telephony.js';
 import {Spectrum} from './visualizer.js';
 import {
-    BluetoothWatcher, CalendarWatcher, ClipboardWatcher, FocusMode, PrivacyWatcher, WeatherWatcher,
+    BluetoothWatcher, CalendarWatcher, ClipboardWatcher, FocusMode, GSConnectPhones, PhoneBatteryWatcher,
+    PrivacyWatcher, WeatherWatcher,
 } from './watchers.js';
 
 export default class LinuxIslandExtension extends Extension {
@@ -41,6 +42,8 @@ export default class LinuxIslandExtension extends Extension {
             pomodoro: new Pomodoro(this._timer, this._settings),
             alarms: new AlarmClock(this._settings),
             btCalls: new BluetoothCalls(),
+            phoneBattery: new PhoneBatteryWatcher(),
+            gsconnect: new GSConnectPhones(),
         };
         this._island = new Island({
             settings: this._settings,

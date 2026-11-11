@@ -307,6 +307,191 @@ export class WeatherWatcher extends EventEmitter {
     }
 }
 
+// ---- Phone battery (UPower, over Bluetooth) -------------------------------
+
+const UPOWER = 'org.freedesktop.UPower';
+const UPOWER_DEVICE = 'org.freedesktop.UPower.Device';
+const TYPE_PHONE = 8;
+const PHONE_LOW = [20, 10];
+
+// Emits 'changed' and 'low' {model, percent}. .phones: [{path, model, percent}].
+export class PhoneBatteryWatcher extends EventEmitter {
+    constructor() {
+        super();
+        this._phones = new Map();
+        this._warned = new Map();
+        this._cancellable = new Gio.Cancellable();
+        const bus = Gio.DBus.system;
+        this._subs = [
+            bus.signal_subscribe(UPOWER, UPOWER, 'DeviceAdded', '/org/freedesktop/UPower', null,
+                Gio.DBusSignalFlags.NONE, (_c, _s, _p, _i, _n, params) => this._add(params.deepUnpack()[0])),
+            bus.signal_subscribe(UPOWER, UPOWER, 'DeviceRemoved', '/org/freedesktop/UPower', null,
+                Gio.DBusSignalFlags.NONE, (_c, _s, _p, _i, _n, params) => {
+                    if (this._phones.delete(params.deepUnpack()[0]))
+                        this.emit('changed');
+                }),
+            bus.signal_subscribe(UPOWER, 'org.freedesktop.DBus.Properties', 'PropertiesChanged', null,
+                UPOWER_DEVICE, Gio.DBusSignalFlags.NONE, (_c, _s, path) => {
+                    if (this._phones.has(path))
+                        this._add(path);
+                }),
+        ];
+        bus.call(UPOWER, '/org/freedesktop/UPower', UPOWER, 'EnumerateDevices', null, null,
+            Gio.DBusCallFlags.NONE, -1, this._cancellable, (conn, res) => {
+                try {
+                    conn.call_finish(res).deepUnpack()[0].forEach(path => this._add(path));
+                } catch {
+                    // No UPower.
+                }
+            });
+    }
+
+    _add(path) {
+        Gio.DBus.system.call(UPOWER, path, 'org.freedesktop.DBus.Properties', 'GetAll',
+            new GLib.Variant('(s)', [UPOWER_DEVICE]), null, Gio.DBusCallFlags.NONE, -1,
+            this._cancellable, (conn, res) => {
+                let props;
+                try {
+                    props = conn.call_finish(res).recursiveUnpack()[0];
+                } catch {
+                    return;
+                }
+                if (props.Type !== TYPE_PHONE || !props.IsPresent)
+                    return;
+                const percent = Math.round(props.Percentage);
+                const phone = {path, model: props.Model || 'Phone', percent};
+                this._phones.set(path, phone);
+                const level = PHONE_LOW.filter(l => percent <= l).pop();
+                if (level !== undefined && this._warned.get(path) !== level) {
+                    this._warned.set(path, level);
+                    this.emit('low', phone);
+                } else if (level === undefined) {
+                    this._warned.delete(path);
+                }
+                this.emit('changed');
+            });
+    }
+
+    get phones() {
+        return [...this._phones.values()];
+    }
+
+    destroy() {
+        this._cancellable.cancel();
+        this._subs.forEach(id => Gio.DBus.system.signal_unsubscribe(id));
+        this.disconnectAll();
+    }
+}
+
+// ---- Phone info over GSConnect (Wi-Fi) ------------------------------------
+
+const GSC_NAME = 'org.gnome.Shell.Extensions.GSConnect';
+const GSC_ROOT = '/org/gnome/Shell/Extensions/GSConnect';
+const GSC_DEVICE = 'org.gnome.Shell.Extensions.GSConnect.Device';
+
+// Emits 'changed' and 'charging' {name, level}. .phone is the first
+// connected, paired phone: {name, connected, level, charging,
+// batteryIcon, signalIcon, network} (level -1 = unknown).
+export class GSConnectPhones extends EventEmitter {
+    constructor() {
+        super();
+        this._devices = new Map();
+        this._cancellable = new Gio.Cancellable();
+        const bus = Gio.DBus.session;
+        this._subs = [
+            bus.signal_subscribe(GSC_NAME, 'org.freedesktop.DBus.ObjectManager', null, GSC_ROOT, null,
+                Gio.DBusSignalFlags.NONE, () => this._load()),
+            bus.signal_subscribe(GSC_NAME, 'org.freedesktop.DBus.Properties', 'PropertiesChanged', null,
+                GSC_DEVICE, Gio.DBusSignalFlags.NONE, (_c, _s, path) => this._refresh(path)),
+            bus.signal_subscribe(GSC_NAME, 'org.gtk.Actions', 'Changed', null, null,
+                Gio.DBusSignalFlags.NONE, (_c, _s, path) => {
+                    if (this._devices.has(path))
+                        this._refresh(path);
+                }),
+            bus.signal_subscribe('org.freedesktop.DBus', 'org.freedesktop.DBus', 'NameOwnerChanged',
+                '/org/freedesktop/DBus', GSC_NAME, Gio.DBusSignalFlags.NONE, () => this._load()),
+        ];
+        this._load();
+    }
+
+    _call(path, iface, method, params) {
+        return new Promise((resolve, reject) => {
+            Gio.DBus.session.call(GSC_NAME, path, iface, method, params, null,
+                Gio.DBusCallFlags.NONE, 3000, this._cancellable, (conn, res) => {
+                    try {
+                        resolve(conn.call_finish(res));
+                    } catch (e) {
+                        reject(e);
+                    }
+                });
+        });
+    }
+
+    async _load() {
+        let objects = {};
+        try {
+            [objects] = (await this._call(GSC_ROOT, 'org.freedesktop.DBus.ObjectManager',
+                'GetManagedObjects', null)).recursiveUnpack();
+        } catch {
+            // GSConnect not running.
+        }
+        const paths = Object.keys(objects).filter(p => objects[p][GSC_DEVICE]);
+        for (const path of [...this._devices.keys()]) {
+            if (!paths.includes(path))
+                this._devices.delete(path);
+        }
+        await Promise.all(paths.map(p => this._refresh(p)));
+        this.emit('changed');
+    }
+
+    async _state(path, action) {
+        try {
+            const [[, , state]] = (await this._call(path, 'org.gtk.Actions', 'Describe',
+                new GLib.Variant('(s)', [action]))).deepUnpack();
+            return state[0]?.deepUnpack() ?? null;
+        } catch {
+            return null; // plugin disabled
+        }
+    }
+
+    async _refresh(path) {
+        let props;
+        try {
+            [props] = (await this._call(path, 'org.freedesktop.DBus.Properties', 'GetAll',
+                new GLib.Variant('(s)', [GSC_DEVICE]))).recursiveUnpack();
+        } catch {
+            return;
+        }
+        const old = this._devices.get(path);
+        const device = {
+            name: props.Name, type: props.Type, connected: props.Connected, paired: props.Paired,
+            level: -1, charging: false, batteryIcon: null, signalIcon: null, network: '',
+        };
+        const battery = await this._state(path, 'battery');
+        if (battery)
+            [device.charging, device.batteryIcon, device.level] = battery;
+        const net = await this._state(path, 'connectivityReport');
+        if (net && net[2] >= 0) {
+            device.network = net[0];
+            device.signalIcon = net[3];
+        }
+        this._devices.set(path, device);
+        if (old && device.connected && device.charging && !old.charging && device.level >= 0)
+            this.emit('charging', {name: device.name, level: device.level});
+        this.emit('changed');
+    }
+
+    get phone() {
+        return [...this._devices.values()].find(d => d.paired && d.connected && d.type === 'phone') ?? null;
+    }
+
+    destroy() {
+        this._cancellable.cancel();
+        this._subs.forEach(id => Gio.DBus.session.signal_unsubscribe(id));
+        this.disconnectAll();
+    }
+}
+
 // ---- Do Not Disturb --------------------------------------------------------
 
 export class FocusMode {

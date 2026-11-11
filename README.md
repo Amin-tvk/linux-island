@@ -23,6 +23,7 @@
 - **Bluetooth calls**: with the phone connected over Bluetooth, incoming calls show the number with **Answer** and **Decline** buttons; answer and you talk through the laptop. During the call the pill shows a timer and a hang-up button.
 - **Incoming calls** get their own view with the caller's name and photo, a green glow and a **Mute** button. An answered call becomes a small live timer.
 - **SMS and phone notifications** (WhatsApp, Telegram… on the phone) show up like any message, and **Reply** sends your answer **through the phone**.
+- **Phone status** in the clock view: battery level (over GSConnect or plain Bluetooth), charging and mobile signal; the island tells you when the phone starts charging or its battery gets low.
 
 ![Incoming call, ongoing call, phone message, screen recording, Pomodoro, clock & tools, Bluetooth headphones, meeting reminder, clipboard, alarm](docs/more-features.png)
 
@@ -163,7 +164,9 @@ Linux Island shows your Android phone's calls and messages through **GSConnect**
    - or from [extensions.gnome.org](https://extensions.gnome.org/extension/1319/gsconnect/)
 2. Log out and back in, then enable it: `gnome-extensions enable gsconnect@andyholmes.github.io`
 3. Install **KDE Connect** on the phone (Google Play or F-Droid), open it and pair with your computer (the computer shows a pairing request).
-4. In KDE Connect on the phone, give it the permissions for **Telephony**, **SMS** and **Notifications** (Android asks for each).
+4. In KDE Connect on the phone, give it the permissions for **Telephony**, **SMS** and **Notifications** (Android asks for each). Without the *Phone* permission, calls and the signal level don't come through.
+
+If the phone doesn't find the computer (common on a phone hotspot), add it by IP in KDE Connect: ⋮ → *Add devices by IP* → the computer's address (`ip -4 addr`).
 
 That's it: calls ring in the island, and messages from the phone can be answered from it. If GSConnect isn't installed, the island just doesn't show phone events.
 

@@ -81,6 +81,8 @@ export class BluetoothCalls extends EventEmitter {
             call.state = props.State;
         if (call.state === 'active' && !call.start)
             call.start = GLib.get_monotonic_time();
+        if (call.state !== old?.state)
+            console.log(`linux-island: bluetooth call ${path.split('/').slice(-2).join('/')}: ${old?.state ?? 'new'} -> ${call.state}`);
         if (call.state === 'disconnected')
             this._calls.delete(path);
         else
