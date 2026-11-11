@@ -1,0 +1,49 @@
+# Maintainer: Amin Tavakoli <tavakolia088@gmail.com>
+pkgname=linux-island-git
+_pkgname=linux-island
+pkgver=r1.0000000
+pkgrel=1
+pkgdesc="Dynamic Island for Linux: now playing, notifications, quick reply, timer (GNOME extension + standalone app for KDE, Hyprland, Sway…)"
+arch=('any')
+url="https://github.com/Amin-tvk/linux-island"
+license=('MIT')
+depends=('python' 'python-gobject' 'python-cairo' 'gtk3')
+makedepends=('git' 'glib2')
+optdepends=(
+    'gnome-shell: the GNOME Shell extension (GNOME 46-50)'
+    'gtk-layer-shell: standalone app on Wayland (KDE Plasma, Hyprland, Sway, Wayfire…)'
+    'gst-plugins-good: music visualizer around the island (GNOME)'
+    'gst-plugin-pipewire: music visualizer with PipeWire'
+    'libcanberra: timer sound in the standalone app'
+)
+provides=("$_pkgname")
+conflicts=("$_pkgname")
+install=linux-island.install
+source=("$_pkgname::git+$url.git")
+sha256sums=('SKIP')
+
+pkgver() {
+    cd "$_pkgname"
+    printf "r%s.%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short=7 HEAD)"
+}
+
+package() {
+    cd "$_pkgname"
+
+    # GNOME Shell extension
+    local uuid="linux-island@miverasan.com"
+    local ext="$pkgdir/usr/share/gnome-shell/extensions/$uuid"
+    install -d "$ext"
+    cp -r gnome-extension/. "$ext/"
+    rm -f "$ext/schemas/gschemas.compiled"
+    glib-compile-schemas "$ext/schemas"
+
+    # Standalone app (started automatically everywhere except GNOME)
+    install -Dm755 standalone/linux_island.py "$pkgdir/usr/bin/linux-island"
+    install -Dm644 standalone/linux-island.desktop "$pkgdir/usr/share/applications/linux-island.desktop"
+    install -d "$pkgdir/etc/xdg/autostart"
+    sed '$a NotShowIn=GNOME;' standalone/linux-island.desktop > "$pkgdir/etc/xdg/autostart/linux-island.desktop"
+
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+    install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+}
