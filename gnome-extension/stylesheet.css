@@ -1,0 +1,70 @@
+.li-island {
+  background-color: rgba(0, 0, 0, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  color: #ffffff;
+  font-size: 13px;
+}
+
+.li-view { padding: 0 12px; spacing: 10px; }
+.li-compact { padding: 0 10px 0 6px; spacing: 9px; }
+.li-media-open, .li-idle-open { padding: 14px 18px 10px; spacing: 8px; }
+.li-notification { padding: 0 16px 0 14px; spacing: 12px; }
+.li-done { padding: 0 18px 0 16px; spacing: 10px; }
+.li-row { spacing: 10px; }
+.li-info { spacing: 2px; padding-left: 4px; }
+
+.li-cover {
+  background-color: rgba(255, 255, 255, 0.10);
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.li-mini-title { font-size: 12.5px; font-weight: 600; }
+.li-title { font-size: 15px; font-weight: 700; }
+.li-artist { font-size: 12.5px; color: rgba(255, 255, 255, 0.65); }
+.li-source { padding: 2px 0; border-radius: 6px; }
+.li-source-box { spacing: 5px; }
+.li-source-label { font-size: 11px; color: rgba(255, 255, 255, 0.45); }
+.li-source:hover .li-source-label { color: rgba(255, 255, 255, 0.8); }
+
+.li-eq { spacing: 2px; padding-right: 4px; }
+.li-eq-bar { width: 3px; border-radius: 2px; background-color: #ffffff; }
+
+.li-progress-row { spacing: 10px; }
+.li-progress {
+  height: 5px;
+  border-radius: 3px;
+  background-color: rgba(255, 255, 255, 0.16);
+}
+.li-progress-fill { border-radius: 3px; background-color: #ffffff; }
+.li-time { font-size: 10.5px; color: rgba(255, 255, 255, 0.55); font-feature-settings: "tnum"; }
+
+.li-controls { spacing: 6px; }
+.li-ctrl-center { spacing: 18px; }
+.li-btn { border-radius: 99px; color: #ffffff; }
+.li-btn:hover { background-color: rgba(255, 255, 255, 0.12); }
+.li-btn:active { background-color: rgba(255, 255, 255, 0.22); }
+.li-ctrl { padding: 6px; }
+.li-play { padding: 8px; background-color: rgba(255, 255, 255, 0.12); }
+.li-small-btn { padding: 6px; color: rgba(255, 255, 255, 0.6); }
+.li-round-btn { padding: 8px; background-color: rgba(255, 255, 255, 0.10); }
+
+.li-clock { font-size: 30px; font-weight: 300; }
+.li-date { font-size: 12.5px; color: rgba(255, 255, 255, 0.6); }
+.li-presets { spacing: 8px; padding-top: 6px; }
+.li-preset {
+  padding: 6px 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  background-color: rgba(255, 255, 255, 0.10);
+}
+.li-timer-big { font-size: 22px; font-weight: 600; font-feature-settings: "tnum"; }
+.li-timer-small { font-size: 13px; font-weight: 600; color: #ffb35c; font-feature-settings: "tnum"; }
+.li-dim-icon { color: rgba(255, 255, 255, 0.55); }
+.li-accent-icon { color: #ffb35c; }
+
+.li-notif-icon { border-radius: 10px; }
+.li-notif-app { font-size: 10.5px; color: rgba(255, 255, 255, 0.5); }
+.li-notif-title { font-size: 13.5px; font-weight: 700; }
+.li-notif-body { font-size: 12.5px; color: rgba(255, 255, 255, 0.72); }
+.li-done-label { font-size: 15px; font-weight: 700; }
+.li-source { color: rgba(255, 255, 255, 0.45); }

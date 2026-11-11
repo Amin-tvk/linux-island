@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.linux-island" path="/org/gnome/shell/extensions/linux-island/">
+    <key name="show-media" type="b">
+      <default>true</default>
+      <summary>Show what is playing</summary>
+    </key>
+    <key name="show-notifications" type="b">
+      <default>true</default>
+      <summary>Show notifications in the island</summary>
+    </key>
+    <key name="replace-banners" type="b">
+      <default>true</default>
+      <summary>Hide GNOME's own notification banners (they still go to the message list)</summary>
+    </key>
+    <key name="hide-when-idle" type="b">
+      <default>false</default>
+      <summary>Hide the island completely when nothing is happening</summary>
+    </key>
+    <key name="expand-on-hover" type="b">
+      <default>true</default>
+      <summary>Expand the media view when the pointer hovers the island</summary>
+    </key>
+    <key name="top-margin" type="i">
+      <range min="0" max="200"/>
+      <default>6</default>
+      <summary>Gap between the top bar and the island (px)</summary>
+    </key>
+    <key name="notification-duration" type="i">
+      <range min="2" max="30"/>
+      <default>5</default>
+      <summary>How long a notification stays in the island (seconds)</summary>
+    </key>
+    <key name="timer-presets" type="ai">
+      <default>[1, 5, 10, 25]</default>
+      <summary>Timer presets (minutes)</summary>
+    </key>
+    <key name="toggle-island" type="as">
+      <default><![CDATA[['<Super><Alt>h']]]></default>
+      <summary>Shortcut to expand / collapse the island</summary>
+    </key>
+  </schema>
+</schemalist>

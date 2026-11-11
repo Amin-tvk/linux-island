@@ -1,0 +1,9 @@
+{
+  "uuid": "linux-island@miverasan.com",
+  "name": "Linux Island",
+  "description": "A Dynamic Island for GNOME: now playing (any MPRIS player) with cover-art colours and controls, notification banners and a timer, in a black pill at the top of the screen.",
+  "shell-version": ["50"],
+  "settings-schema": "org.gnome.shell.extensions.linux-island",
+  "url": "",
+  "version": 1
+}
