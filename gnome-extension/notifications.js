@@ -8,6 +8,8 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as MessageTray from 'resource:///org/gnome/shell/ui/messageTray.js';
 import {EventEmitter} from 'resource:///org/gnome/shell/misc/signals.js';
 
+import {phoneKind} from './phone.js';
+
 export class NotificationWatcher extends EventEmitter {
     constructor(settings) {
         super();
@@ -64,8 +66,9 @@ export class NotificationWatcher extends EventEmitter {
         if (!Main.sessionMode.hasNotifications || Main.layoutManager.primaryMonitor?.inFullscreen)
             return;
         // Critical ones (low battery, alarms…) keep GNOME's banner; the
-        // island steps aside while it is shown.
-        if (n.urgency === MessageTray.Urgency.CRITICAL)
+        // island steps aside while it is shown. A ringing phone is the
+        // exception: the island has a call view for it.
+        if (n.urgency === MessageTray.Urgency.CRITICAL && phoneKind(n) !== 'call')
             return;
 
         this.emit('notification', n);
