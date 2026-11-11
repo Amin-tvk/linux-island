@@ -19,14 +19,31 @@
 - **Quick reply** for messengers: type in the island, press Enter – it opens the chat, pastes your text and sends it. If the chat window doesn't come up, nothing is typed anywhere; your text stays on the clipboard.
 - **Notification list** – the bell (or right-click the island, or Super+Alt+N) shows recent notifications; a red dot means unread.
 
+**Phone** (Android, through [GSConnect](#phone-calls-and-sms))
+- **Incoming calls** get their own view with the caller's name and photo, a green glow and a **Mute** button. An answered call becomes a small live timer.
+- **SMS and phone notifications** (WhatsApp, Telegram… on the phone) show up like any message, and **Reply** sends your answer **through the phone**.
+
+![Incoming call, ongoing call, phone message, screen recording, Pomodoro, clock & tools, Bluetooth headphones, meeting reminder, clipboard, alarm](docs/more-features.png)
+
 **System**
+- **Bluetooth headphones** connecting, with their battery level.
+- **Privacy dots** next to the island while the microphone (orange), camera (green) or a screen recording (red) is in use. A screen recording shows a live timer with a stop button.
+- **Meeting reminders** from GNOME Calendar / your online accounts a few minutes before an event, and the next event in the clock view.
+- **Clipboard peek**: a quick look at what you just copied (copies from password managers are never shown).
+- **Weather** in the clock view (from GNOME Weather's location).
+- **Focus mode**: one click turns Do Not Disturb on or off.
 - **Volume, brightness and keyboard-layout changes** appear in the island instead of GNOME's big OSD.
 - **Charger plugged / unplugged, fully charged, low battery** (20 / 10 / 5 %).
 - Scroll up / down on the island to change the volume.
+**Time**
 - **Timer** with presets (1 / 5 / 10 / 25 min by default), pause, stop, a sound and an orange glow when time is up. Click the idle pill for the clock and timer.
+- **Pomodoro**: 25 min focus / 5 min break, a long break every 4 rounds (all adjustable), with the round and time left in the pill.
+- **Stopwatch** that keeps running in the pill.
+- **Daily alarms** (set them in Settings), shown in the clock view; they ring and glow until you click.
+- **Up to the minute**: everything that runs (recording, call, Pomodoro, timer, stopwatch) shows as a compact live activity, also next to the music.
 
 **Yours to tune**
-- **Size** (0.7× – 1.6×), **animation speed**, gap below the top bar, visualizer style, and every feature on or off.
+- **Size** (0.7× – 1.6×), **animation speed**, gap below the top bar, which **monitor**, visualizer style, and every feature on or off.
 - Stays out of your way: only the pill takes clicks, it hides in full-screen apps, and it can hide completely when idle.
 - Right-to-left text (Persian, Arabic, Hebrew) renders correctly. Nothing leaves your computer; notification text is never saved.
 
@@ -79,6 +96,7 @@ sudo pacman -S --needed gtk-layer-shell gst-plugins-good gst-plugin-pipewire lib
 Then:
 
 - **GNOME:** log out and back in, then `gnome-extensions enable linux-island@miverasan.com`
+- **Phone calls and SMS:** see [Phone calls and SMS](#phone-calls-and-sms)
 - **Other desktops:** it starts at your next login, or run `linux-island` now.
 
 To update, run `makepkg -si` again in the same folder (it pulls the latest version). To remove: `sudo pacman -R linux-island-git`.
@@ -133,6 +151,21 @@ Settings live in `~/.config/linux-island/config.json` (restart the app after edi
 
 The standalone app reads notifications with a read-only D-Bus monitor, so your notification daemon (Plasma, dunst, mako, swaync, xfce4-notifyd…) keeps showing its own popups too. To have them only in the island, turn popups off in that daemon. Clicking a notification in the standalone app dismisses it; it can't open the sending app.
 
+## Phone calls and SMS
+
+Linux Island shows your Android phone's calls and messages through **GSConnect**, the GNOME version of KDE Connect. Phone and computer must be on the same Wi-Fi.
+
+1. Install GSConnect on the computer:
+   - Ubuntu / Debian: `sudo apt install gnome-shell-extension-gsconnect`
+   - Fedora: `sudo dnf install gnome-shell-extension-gsconnect`
+   - Arch: `sudo pacman -S gnome-shell-extension-gsconnect`
+   - or from [extensions.gnome.org](https://extensions.gnome.org/extension/1319/gsconnect/)
+2. Log out and back in, then enable it: `gnome-extensions enable gsconnect@andyholmes.github.io`
+3. Install **KDE Connect** on the phone (Google Play or F-Droid), open it and pair with your computer (the computer shows a pairing request).
+4. In KDE Connect on the phone, give it the permissions for **Telephony**, **SMS** and **Notifications** (Android asks for each).
+
+That's it: calls ring in the island, and messages from the phone can be answered from it. If GSConnect isn't installed, the island just doesn't show phone events.
+
 ## How quick reply works (GNOME)
 
 GNOME passes notification events to apps through a separate helper process, and that helper drops the standard "reply" signal. So Linux Island replies the way you would: it opens the chat through the notification, **waits until that app's window has focus**, pastes your text and presses Enter, then puts your old clipboard back. If the app's window doesn't come up within 3 seconds, it stops and leaves the text on the clipboard. The Reply button appears for the messengers listed in Settings → *Messenger apps* (Telegram and its forks, WhatsApp clients, Signal, Discord, Slack, Element, Bale, Rubika, Eitaa, Soroush…); add your own there.
@@ -151,6 +184,8 @@ GNOME passes notification events to apps through a separate helper process, and 
 - **No visualizer** – install the GStreamer *good* plugins (`gst-plugins-good`, on Debian/Ubuntu `gstreamer1.0-plugins-good` and `gstreamer1.0-pulseaudio`). It listens to what your speakers play, so GNOME may show the microphone/recording indicator while music plays; turn *Music visualizer* off in Settings if you don't want that.
 - **A player isn't shown** – check it supports MPRIS: `busctl --user list | grep mpris`.
 - **No queue button** – the player doesn't publish its queue over MPRIS (Spotify and browsers don't).
+- **No phone events** – check GSConnect is enabled and the phone shows as connected in its menu, and that KDE Connect on the phone has the Telephony / SMS / Notifications permissions.
+- **No weather** – set a location in the GNOME Weather app. **No meeting reminders** – add your calendar in GNOME Settings → Online Accounts (or GNOME Calendar).
 - **Standalone on Wayland is a normal window** – `gtk-layer-shell` isn't installed, or your compositor doesn't support layer-shell (GNOME). Run `linux-island` from a terminal to see messages.
 
 ## Development
@@ -175,7 +210,9 @@ MIT – see [LICENSE](LICENSE).
 
 ## فارسی
 
-**Linux Island** یک «دایناميک آیلند» برای لینوکس است: یک قرص مشکی بالای صفحه که آهنگ در حال پخش را با یک اکولایزر که با صدا می‌رقصد نشان می‌دهد، نوتیفیکیشن‌ها را نمایش می‌دهد و می‌شود همان‌جا به پیام‌های تلگرام و بقیه‌ی پیام‌رسان‌ها جواب داد. پلی‌لیست و صف پخش، تغییر صدا و روشنایی، شارژ باتری و تایمر هم دارد. سایز و سرعت انیمیشن قابل تنظیم است.
+**Linux Island** یک «دایناميک آیلند» برای لینوکس است: یک قرص مشکی بالای صفحه که آهنگ در حال پخش را نشان می‌دهد، نوتیفیکیشن‌ها را نمایش می‌دهد و می‌شود همان‌جا به پیام‌های تلگرام و بقیه‌ی پیام‌رسان‌ها جواب داد. **تماس و پیامک گوشی** (با GSConnect)، هدفون بلوتوث، نقطه‌های میکروفون/دوربین/ضبط صفحه، یادآور جلسه، پومودورو، کرنومتر، آلارم، آب‌وهوا، حالت مزاحم نشو، پلی‌لیست، تغییر صدا و روشنایی و شارژ باتری هم دارد. سایز و سرعت انیمیشن قابل تنظیم است.
+
+**وصل کردن گوشی:** روی کامپیوتر <code>sudo apt install gnome-shell-extension-gsconnect</code> را نصب کنید، روی گوشی اپ **KDE Connect** را نصب و جفت کنید (هر دو روی یک وای‌فای). از این به بعد تماس‌ها و پیامک‌ها در آیلند نشان داده می‌شوند.
 
 - **گنوم** (اوبونتو، فدورا، آرچ، منجارو…): اکستنشن گنوم
 - **KDE، Hyprland، Sway، XFCE، Cinnamon** و بقیه: برنامه‌ی مستقل

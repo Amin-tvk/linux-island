@@ -15,6 +15,7 @@ optdepends=(
     'gst-plugins-good: music visualizer around the island (GNOME)'
     'gst-plugin-pipewire: music visualizer with PipeWire'
     'libcanberra: timer sound in the standalone app'
+    'gnome-shell-extension-gsconnect: phone calls and SMS in the island (with KDE Connect on the phone)'
 )
 provides=("$_pkgname")
 conflicts=("$_pkgname")
