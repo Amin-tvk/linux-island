@@ -77,7 +77,7 @@ export default class LinuxIslandPreferences extends ExtensionPreferences {
 
         const phone = new Adw.PreferencesGroup({
             title: 'Phone',
-            description: 'Incoming calls, SMS and phone notifications through GSConnect (KDE Connect for GNOME) and the KDE Connect app on your Android phone.',
+            description: 'Incoming calls need the KDE Connect / GSConnect Phone permission on Android (not only notification sync). On Xiaomi/POCO also set battery usage to No restrictions. SMS and replies use notification sync.',
         });
         phone.add(switchRow('show-phone', 'Calls and phone messages',
             'Ringing calls get their own view with a Mute button; answered calls show a timer; replies go through your phone'));

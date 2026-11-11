@@ -378,9 +378,10 @@ const GSC_NAME = 'org.gnome.Shell.Extensions.GSConnect';
 const GSC_ROOT = '/org/gnome/Shell/Extensions/GSConnect';
 const GSC_DEVICE = 'org.gnome.Shell.Extensions.GSConnect.Device';
 
-// Emits 'changed' and 'charging' {name, level}. .phone is the first
-// connected, paired phone: {name, connected, level, charging,
-// batteryIcon, signalIcon, network} (level -1 = unknown).
+// Emits 'changed', 'connected'/'disconnected' {name, level?}, and
+// 'charging'/'discharging' {name, level}. .phone is the first connected,
+// paired phone: {name, connected, level, charging, batteryIcon,
+// signalIcon, network} (level -1 = unknown).
 export class GSConnectPhones extends EventEmitter {
     constructor() {
         super();
@@ -455,7 +456,13 @@ export class GSConnectPhones extends EventEmitter {
         const old = this._devices.get(path);
         const device = {
             name: props.Name, type: props.Type, connected: props.Connected, paired: props.Paired,
-            level: -1, charging: false, batteryIcon: null, signalIcon: null, network: '',
+            // Keep last battery reading when the plugin briefly fails to answer;
+            // otherwise charging flickers false→true and spam-notifies.
+            level: old?.level ?? -1,
+            charging: old?.charging ?? false,
+            batteryIcon: old?.batteryIcon ?? null,
+            signalIcon: null,
+            network: '',
         };
         const battery = await this._state(path, 'battery');
         if (battery)
@@ -464,10 +471,25 @@ export class GSConnectPhones extends EventEmitter {
         if (net && net[2] >= 0) {
             device.network = net[0];
             device.signalIcon = net[3];
+        } else if (old) {
+            device.network = old.network;
+            device.signalIcon = old.signalIcon;
         }
         this._devices.set(path, device);
-        if (old && device.connected && device.charging && !old.charging && device.level >= 0)
-            this.emit('charging', {name: device.name, level: device.level});
+
+        if (old) {
+            const name = device.name || old.name;
+            if (old.connected && !device.connected)
+                this.emit('disconnected', {name});
+            else if (!old.connected && device.connected && device.type === 'phone')
+                this.emit('connected', {name, level: device.level});
+            if (device.connected && device.level >= 0) {
+                if (device.charging && !old.charging)
+                    this.emit('charging', {name, level: device.level});
+                else if (!device.charging && old.charging)
+                    this.emit('discharging', {name, level: device.level});
+            }
+        }
         this.emit('changed');
     }
 

@@ -49,10 +49,22 @@ export class NotificationWatcher extends EventEmitter {
             'destroy', () => tray._removeSource(source),
             tray);
         source.connectObject(
-            'notification-added', () => this.emit('history-changed'),
+            'notification-added', (_s, n) => this._onAdded(n),
             'notification-removed', () => this.emit('history-changed'),
             this);
         this.emit('history-changed');
+    }
+
+    // Calls can be CRITICAL (GNOME keeps its own banner path) or added
+    // without a banner request — still hand them to the island.
+    _onAdded(n) {
+        this.emit('history-changed');
+        const kind = phoneKind(n);
+        if (kind !== 'call' && kind !== 'ongoing')
+            return;
+        if (!this.enabled || this.blocked)
+            return;
+        this.emit('notification', n);
     }
 
     // Same rules GNOME uses before showing a banner.
@@ -61,15 +73,16 @@ export class NotificationWatcher extends EventEmitter {
             return;
         if (n.acknowledged || n.urgency === MessageTray.Urgency.LOW)
             return;
+        const kind = phoneKind(n);
         // A ringing phone gets through Do Not Disturb.
-        if (!n.source.policy.showBanners && n.urgency !== MessageTray.Urgency.CRITICAL && phoneKind(n) !== 'call')
+        if (!n.source.policy.showBanners && n.urgency !== MessageTray.Urgency.CRITICAL && kind !== 'call')
             return;
         if (!Main.sessionMode.hasNotifications || Main.layoutManager.primaryMonitor?.inFullscreen)
             return;
         // Critical ones (low battery, alarms…) keep GNOME's banner; the
         // island steps aside while it is shown. A ringing phone is the
         // exception: the island has a call view for it.
-        if (n.urgency === MessageTray.Urgency.CRITICAL && phoneKind(n) !== 'call')
+        if (n.urgency === MessageTray.Urgency.CRITICAL && kind !== 'call')
             return;
 
         this.emit('notification', n);

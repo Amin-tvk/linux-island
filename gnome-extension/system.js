@@ -40,23 +40,32 @@ export class OsdRedirect extends EventEmitter {
     }
 }
 
+let _soundSettings = null;
+function soundSettings() {
+    return _soundSettings ??= new Gio.Settings({schema_id: 'org.gnome.desktop.sound'});
+}
+
 export function changeVolume(steps) {
     const control = Volume.getMixerControl();
     const sink = control?.get_default_sink();
     if (!sink)
         return;
-    const max = control.get_vol_max_norm();
-    const volume = Math.max(0, Math.min(max, sink.volume + steps * max * 0.05));
+    const norm = control.get_vol_max_norm();
+    const allowAmp = soundSettings().get_boolean('allow-volume-above-100-percent');
+    const max = allowAmp ? control.get_vol_max_amplified() : norm;
+    const volume = Math.max(0, Math.min(max, sink.volume + steps * norm * 0.05));
     sink.volume = volume;
     if (sink.is_muted && volume > 0)
         sink.change_is_muted(false);
     sink.push_volume();
 
-    const level = volume / max;
-    const name = volume === 0 ? 'muted'
+    // Same units GNOME's volume indicator uses for the OSD.
+    const level = volume / norm;
+    const maxLevel = max / norm;
+    const name = volume === 0 || sink.is_muted ? 'muted'
         : level < 0.34 ? 'low' : level < 0.67 ? 'medium' : 'high';
     Main.osdWindowManager.showOne(Main.layoutManager.primaryIndex,
-        new Gio.ThemedIcon({name: `audio-volume-${name}-symbolic`}), null, level, 1);
+        new Gio.ThemedIcon({name: `audio-volume-${name}-symbolic`}), null, level, maxLevel);
 }
 
 const UPowerDevice = Gio.DBusProxy.makeProxyWrapper(`

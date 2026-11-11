@@ -45,6 +45,7 @@ const SHRINK_TIME = 230;
 const PEEK_TIME = 2800;
 const OSD_TIME = 1500;
 const EVENT_TIME = 3000;
+const PHONE_PEEK_MS = 5 * 60 * 1000; // quiet battery reminder while connected
 
 const BATTERY_TEXT = {
     charging: 'Charging',
@@ -1017,18 +1018,70 @@ class Island extends St.Widget {
         this._settings.connectObject('changed::alarms', () => this._syncToolsIfOpen(), this);
         this._x.btCalls.connectObject('changed', () => this._onBtCalls(), this);
         this._x.gsconnect.connectObject(
-            'changed', () => this._onPhoneStatusChanged(),
-            'charging', (_w, {name, level}) => {
-                if (this._settings.get_boolean('show-phone'))
-                    this._showEvent({iconName: 'battery-good-charging-symbolic', title: `${name} charging`,
-                        value: `${level}%`, valueClass: 'li-battery-ok', iconClass: 'li-battery-ok'});
-            }, this);
+            'changed', () => {
+                this._onPhoneStatusChanged();
+                this._checkPhoneBattery();
+            },
+            'connected', (_w, {name, level}) => this._showPhoneEvent({
+                iconName: 'phone-symbolic',
+                title: name,
+                value: level >= 0 ? `${level}%` : 'Connected',
+                valueClass: 'li-battery-ok',
+            }),
+            'disconnected', (_w, {name}) => this._showPhoneEvent({
+                iconName: 'smartphone-symbolic',
+                title: name,
+                value: 'Disconnected',
+            }),
+            'charging', (_w, {name, level}) => this._showPhoneEvent({
+                iconName: 'battery-good-charging-symbolic',
+                title: `${name} charging`,
+                value: `${level}%`,
+                valueClass: 'li-battery-ok',
+                iconClass: 'li-battery-ok',
+            }),
+            'discharging', (_w, {name, level}) => this._showPhoneEvent({
+                iconName: 'battery-good-symbolic',
+                title: `${name} on battery`,
+                value: `${level}%`,
+            }), this);
         this._x.phoneBattery.connectObject('changed', () => {
             this._onPhoneStatusChanged();
             this._checkPhoneBattery();
         }, this);
-        this._x.gsconnect.connectObject('changed', () => this._checkPhoneBattery(), this);
         this._phoneWarned = new Set();
+        // Quiet status peek while connected — not on every battery tick.
+        this._setTimeout('phone-peek', PHONE_PEEK_MS, () => {
+            this._peekPhoneBattery();
+            return GLib.SOURCE_CONTINUE;
+        });
+    }
+
+    _showPhoneEvent(ev) {
+        if (!this._settings.get_boolean('show-phone'))
+            return;
+        this._showEvent(ev);
+    }
+
+    // Occasional reminder of the phone's charge while it stays connected.
+    _peekPhoneBattery() {
+        if (!this._settings.get_boolean('show-phone'))
+            return;
+        const phone = this._phoneStatus();
+        if (!phone || phone.percent < 0)
+            return;
+        // Skip while a more important view is up.
+        if (this._state === 'call' || this._state === 'notification' || this._state === 'notification-open')
+            return;
+        const title = phone.charging ? `${phone.name} charging` : phone.name;
+        this._showEvent({
+            iconName: phone.charging ? 'battery-good-charging-symbolic' : 'phone-symbolic',
+            title,
+            value: `${phone.percent}%`,
+            valueClass: phone.percent <= 20 && !phone.charging ? 'li-battery-low'
+                : phone.charging ? 'li-battery-ok' : '',
+            iconClass: phone.charging ? 'li-battery-ok' : '',
+        });
     }
 
     // The phone's battery from GSConnect (knows charging) or Bluetooth.
@@ -1610,6 +1663,9 @@ class Island extends St.Widget {
         this._osd = true;
         this._osdIcon.gicon = icon;
         const hasLevel = level !== null && level !== undefined;
+        // GNOME passes level as volume/norm (can be >1 with overamplification)
+        // and maxLevel as amplifiedMax/norm. The bar fills against the real
+        // ceiling; the number matches GNOME/pactl (100% = normal max).
         const max = maxLevel > 0 ? maxLevel : 1;
         this._osdBar.visible = hasLevel;
         this._osdValue.visible = hasLevel;
@@ -1617,8 +1673,8 @@ class Island extends St.Widget {
         this._osdLabel.x_expand = !hasLevel;
         this._osdLabel.text = text ?? '';
         if (hasLevel) {
-            this._osdBar.fraction = level / max;
-            this._osdValue.text = `${Math.round(level / max * 100)}`;
+            this._osdBar.fraction = Math.min(1, level / max);
+            this._osdValue.text = `${Math.round(level * 100)}`;
         }
         this._restartTimeout('osd', OSD_TIME, () => {
             this._osd = null;
