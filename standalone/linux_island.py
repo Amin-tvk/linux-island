@@ -56,6 +56,8 @@ DEFAULT_CONFIG = {
     'timer_presets': [1, 5, 10, 25],
     'ignore_apps': [],
     'monitor': None,
+    'scale': 1.0,
+    'animation_speed': 1.0,
 }
 
 # Island size [w, h] for every state.
@@ -512,14 +514,17 @@ class Island(Gtk.Window):
         super().__init__(application=app, title='Linux Island')
         self.app = app
         self.cfg = load_config()
+        # Everything is laid out at size 1 and scaled when drawn.
+        self.s = max(0.7, min(1.6, float(self.cfg.get('scale', 1.0))))
+        self.speed = max(0.5, min(2.5, float(self.cfg.get('animation_speed', 1.0))))
         self.set_decorated(False)
         self.set_resizable(False)
         self.set_app_paintable(True)
         self.set_skip_taskbar_hint(True)
         self.set_skip_pager_hint(True)
         self.set_accept_focus(False)
-        self.set_default_size(WIN_W, WIN_H)
-        self.set_size_request(WIN_W, WIN_H)
+        self.set_default_size(int(WIN_W * self.s), int(WIN_H * self.s))
+        self.set_size_request(int(WIN_W * self.s), int(WIN_H * self.s))
         visual = self.get_screen().get_rgba_visual()
         if visual:
             self.set_visual(visual)
@@ -531,7 +536,7 @@ class Island(Gtk.Window):
             GtkLayerShell.set_namespace(self, 'linux-island')
             GtkLayerShell.set_layer(self, GtkLayerShell.Layer.TOP)
             GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.TOP, True)
-            GtkLayerShell.set_margin(self, GtkLayerShell.Edge.TOP, max(0, self.cfg['top_margin'] - TOP))
+            GtkLayerShell.set_margin(self, GtkLayerShell.Edge.TOP, max(0, self.cfg['top_margin'] - int(TOP * self.s)))
             GtkLayerShell.set_exclusive_zone(self, 0)
             GtkLayerShell.set_keyboard_mode(self, GtkLayerShell.KeyboardMode.NONE)
             monitor = self._monitor()
@@ -608,7 +613,7 @@ class Island(Gtk.Window):
         if not mon:
             return
         area = mon.get_workarea()
-        self.move(area.x + (area.width - WIN_W) // 2, area.y + self.cfg['top_margin'] - TOP)
+        self.move(area.x + (area.width - int(WIN_W * self.s)) // 2, area.y + self.cfg['top_margin'] - int(TOP * self.s))
 
     def island_rect(self):
         w, h = self.cur_w, self.cur_h
@@ -621,7 +626,7 @@ class Island(Gtk.Window):
         if self.opacity_target == 0:
             region = cairo.Region()
         else:
-            x, y, w, h = self.island_rect()
+            x, y, w, h = (v * self.s for v in self.island_rect())
             region = cairo.Region(cairo.RectangleInt(int(x), int(y), int(math.ceil(w)), int(math.ceil(h))))
         win.input_shape_combine_region(region, 0, 0)
 
@@ -675,13 +680,13 @@ class Island(Gtk.Window):
         dt = 1 / 60 if self._last_frame is None else min(0.05, t - self._last_frame)
         self._last_frame = t
         tw, th = SIZES[self.state]
-        k = 240.0
+        k = 330.0 * self.speed ** 2
         c = 2 * math.sqrt(k) * 0.72  # a little bounce
         self.vel_w += ((tw - self.cur_w) * k - self.vel_w * c) * dt
         self.vel_h += ((th - self.cur_h) * k - self.vel_h * c) * dt
         self.cur_w += self.vel_w * dt
         self.cur_h += self.vel_h * dt
-        self.fade = min(1.0, self.fade + dt / 0.28)
+        self.fade = min(1.0, self.fade + dt * self.speed / 0.2)
         self.opacity_cur += (self.opacity_target - self.opacity_cur) * min(1.0, dt * 12)
         for i in range(4):
             self.eq[i] += (self.eq_target[i] - self.eq[i]) * min(1.0, dt * 14)
@@ -851,8 +856,8 @@ class Island(Gtk.Window):
         return ix <= x <= ix + w and iy <= y <= iy + h
 
     def _on_motion(self, _w, event):
-        self.pointer = (event.x, event.y)
-        inside = self._inside(event.x, event.y)
+        self.pointer = (event.x / self.s, event.y / self.s)
+        inside = self._inside(*self.pointer)
         if inside != self.hover:
             self.hover = inside
             self._on_hover()
@@ -869,19 +874,20 @@ class Island(Gtk.Window):
         if self.hover:
             self._clear_timeout('collapse')
             if self.state == 'media' and self.cfg['expand_on_hover']:
-                self._set_timeout('expand', 220, self.expand)
+                self._set_timeout('expand', int(120 / self.speed), self.expand)
         else:
             self._clear_timeout('expand')
             if self.expanded or self.tools_open:
-                self._set_timeout('collapse', 550, self.collapse)
+                self._set_timeout('collapse', int(350 / self.speed), self.collapse)
 
     def _on_click(self, _w, event):
+        ex, ey = event.x / self.s, event.y / self.s
         for (x, y, w, h), cb in self.buttons:
-            if x <= event.x <= x + w and y <= event.y <= y + h:
+            if x <= ex <= x + w and y <= ey <= y + h:
                 if event.button == 1:
-                    cb(event.x)
+                    cb(ex)
                 return True
-        if not self._inside(event.x, event.y):
+        if not self._inside(ex, ey):
             return False
         if self.state == 'done':
             self.dismiss_done()
@@ -932,8 +938,9 @@ class Island(Gtk.Window):
         cr.set_source_rgba(0, 0, 0, 0)
         cr.paint()
         cr.set_operator(cairo.OPERATOR_OVER)
+        cr.scale(self.s, self.s)
         self.buttons = []
-        self.scale = widget.get_scale_factor()
+        self.scale = max(1, round(widget.get_scale_factor() * self.s + 0.49))
 
         alpha = self.opacity_cur
         if alpha <= 0.01:

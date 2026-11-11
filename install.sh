@@ -128,7 +128,8 @@ PY
     mkdir -p "$bin" "$apps" "$autostart"
     install -m 755 "$HERE/standalone/linux_island.py" "$bin/linux-island"
     sed "s|^Exec=.*|Exec=$bin/linux-island|" "$HERE/standalone/linux-island.desktop" > "$apps/linux-island.desktop"
-    cp "$apps/linux-island.desktop" "$autostart/linux-island.desktop"
+    # On GNOME the extension does this job, so never autostart there.
+    sed '$a NotShowIn=GNOME;' "$apps/linux-island.desktop" > "$autostart/linux-island.desktop"
     info "installed $bin/linux-island (starts automatically at login)"
 
     "$bin/linux-island" --quit >/dev/null 2>&1 || true
