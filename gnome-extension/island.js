@@ -10,11 +10,12 @@ import Shell from 'gi://Shell';
 import St from 'gi://St';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import * as MessageTray from 'resource:///org/gnome/shell/ui/messageTray.js';
 
 import {DEFAULT_ACCENT} from './art.js';
 import {changeVolume} from './system.js';
 import {Aura} from './visualizer.js';
-import {canReplyViaPhone, phoneKind, replyViaPhone, sourceApp} from './phone.js';
+import {callInfo, canReplyViaPhone, idShape, phoneKind, replyViaPhone, sourceApp} from './phone.js';
 import {formatNumber} from './telephony.js';
 import {formatTime, formatUs} from './timer.js';
 
@@ -1615,11 +1616,21 @@ class Island extends St.Widget {
             return;
         // An answered call becomes a live activity, not a banner.
         if (kind === 'ongoing') {
-            this._call = {name: stripMarkup(n.title), start: GLib.get_monotonic_time()};
-            n.connectObject('destroy', () => {
-                this._call = null;
-                this._syncLive();
-                this._update();
+            this._clearTimeout('call-end');
+            this._call = {n, name: stripMarkup(callInfo(n).name), start: this._call?.start ?? GLib.get_monotonic_time()};
+            n.connectObject('destroy', (_n, reason) => {
+                // Phones repost the in-call notification every few seconds.
+                const end = () => {
+                    if (this._call?.n !== n)
+                        return;
+                    this._call = null;
+                    this._syncLive();
+                    this._update();
+                };
+                if (reason === MessageTray.NotificationDestroyedReason.REPLACED)
+                    this._restartTimeout('call-end', 2000, end);
+                else
+                    end();
             }, this);
             this._queue.filter(q => phoneKind(q) === 'call').forEach(q => this._dropNotification(q));
             if (phoneKind(this._current) === 'call')
@@ -1628,11 +1639,21 @@ class Island extends St.Widget {
             this._update();
             return;
         }
+        // A reposted ringing notification takes the old one's place.
+        if (kind === 'call' && phoneKind(this._current) === 'call' && this._current !== n) {
+            this._clearTimeout('replaced');
+            this._current.disconnectObject(this);
+            this._current = n;
+            this._watchDestroy(n);
+            this._syncNotification();
+            this._update();
+            return;
+        }
         // A ringing phone jumps the queue; what was showing comes back after.
         if (kind === 'call' && this._current && this._current !== n && !this._queue.includes(n)) {
             this._queue.unshift(this._current);
             this._current = null;
-            n.connectObject('destroy', () => this._dropNotification(n), this);
+            this._watchDestroy(n);
             this._queue.unshift(n);
             this._nextNotification();
             return;
@@ -1644,12 +1665,24 @@ class Island extends St.Widget {
         }
         if (this._queue.includes(n))
             return;
-        n.connectObject('destroy', () => this._dropNotification(n), this);
+        this._watchDestroy(n);
         this._queue.push(n);
         if (!this._current)
             this._nextNotification();
         else
             this._syncNotificationCount();
+    }
+
+    _watchDestroy(n) {
+        n.connectObject('destroy', (_n, reason) => {
+            // A reposted phone notification (ringing) replaces this one
+            // within moments; don't let the island flicker in between.
+            if (reason === MessageTray.NotificationDestroyedReason.REPLACED && phoneKind(n) === 'call') {
+                this._restartTimeout('replaced', 2000, () => this._dropNotification(n));
+                return;
+            }
+            this._dropNotification(n);
+        }, this);
     }
 
     _nextNotification() {
@@ -1689,7 +1722,8 @@ class Island extends St.Widget {
         this._bigNotifIcon.gicon = icon;
 
         if (phoneKind(n) === 'call') {
-            this._callName.text = title || app;
+            const info = callInfo(n);
+            this._callName.text = stripMarkup(info.name) || title || app;
             this._callSub.text = 'Incoming call';
             this._callIcon.gicon = n.gicon ?? new Gio.ThemedIcon({name: 'call-start-symbolic'});
             this._showCallButtons(false);
@@ -1697,7 +1731,7 @@ class Island extends St.Widget {
 
         this._actionRow.destroy_all_children();
         const canReply = canReplyViaPhone(n) || this._reply.canReply(n);
-        console.log(`linux-island: notification from app=${sourceApp(n.source)?.get_id() ?? '-'} title=${app} reply=${canReply} actions=${n.actions.map(a => a.label).join('|')}`);
+        console.log(`linux-island: notification from app=${sourceApp(n.source)?.get_id() ?? '-'} title=${app} reply=${canReply} actions=${n.actions.map(a => a.label).join('|')}${phoneKind(n) ? ` phone=${phoneKind(n)} id=${idShape(n)}` : ''}`);
         if (canReply)
             this._actionRow.add_child(this._textButton('Reply', 'li-chip li-chip-accent', () => this._startReply()));
         // The app's own "Reply" just opens the window; ours replaces it.

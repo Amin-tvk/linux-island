@@ -405,8 +405,9 @@ export class GSConnectPhones extends EventEmitter {
 
     _call(path, iface, method, params) {
         return new Promise((resolve, reject) => {
+            // NO_AUTO_START: only read GSConnect if it already runs.
             Gio.DBus.session.call(GSC_NAME, path, iface, method, params, null,
-                Gio.DBusCallFlags.NONE, 3000, this._cancellable, (conn, res) => {
+                Gio.DBusCallFlags.NO_AUTO_START, 3000, this._cancellable, (conn, res) => {
                     try {
                         resolve(conn.call_finish(res));
                     } catch (e) {

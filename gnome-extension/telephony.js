@@ -57,7 +57,7 @@ export class BluetoothCalls extends EventEmitter {
 
     _load() {
         Gio.DBus.session.call(BUS_NAME, ROOT, 'org.freedesktop.DBus.ObjectManager', 'GetManagedObjects',
-            null, null, Gio.DBusCallFlags.NONE, 2000, this._cancellable, (conn, res) => {
+            null, null, Gio.DBusCallFlags.NO_AUTO_START, 2000, this._cancellable, (conn, res) => {
                 try {
                     const [objects] = conn.call_finish(res).recursiveUnpack();
                     for (const [path, ifaces] of Object.entries(objects)) {

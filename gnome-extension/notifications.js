@@ -61,7 +61,8 @@ export class NotificationWatcher extends EventEmitter {
             return;
         if (n.acknowledged || n.urgency === MessageTray.Urgency.LOW)
             return;
-        if (!n.source.policy.showBanners && n.urgency !== MessageTray.Urgency.CRITICAL)
+        // A ringing phone gets through Do Not Disturb.
+        if (!n.source.policy.showBanners && n.urgency !== MessageTray.Urgency.CRITICAL && phoneKind(n) !== 'call')
             return;
         if (!Main.sessionMode.hasNotifications || Main.layoutManager.primaryMonitor?.inFullscreen)
             return;

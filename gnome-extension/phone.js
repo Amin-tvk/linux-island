@@ -11,6 +11,12 @@ import GLib from 'gi://GLib';
 
 const GSCONNECT_APP = 'org.gnome.Shell.Extensions.GSConnect.desktop';
 
+// Without KDE Connect's telephony permission (or on phones that don't
+// send call events) a call still arrives as a mirror of the phone's
+// in-call notification. Android notification keys contain the package.
+const DIALER = /incallui|dialer|telecom|com\.android\.phone/i;
+const RINGING = /incoming|ringing|calling|تماس ورودی|درحال تماس|در حال تماس|زنگ/i;
+
 // GTK notification sources keep their app in _app, FDO ones in app.
 export function sourceApp(source) {
     return source?.app ?? source?._app ?? null;
@@ -44,12 +50,32 @@ export function phoneKind(n) {
         return 'ongoing';
     if (id.includes('MissedCall'))
         return 'missed';
+    if (DIALER.test(id)) {
+        if (n.actions.some(a => /call back|message|تماس مجدد|پیام/i.test(a.label)))
+            return 'missed';
+        return RINGING.test(`${n.title} ${n.body}`) ? 'call' : 'ongoing';
+    }
     const target = deviceTarget(n);
     if (target?.action === 'replyNotification')
         return 'message';
     if (target?.action === 'replySms')
         return 'sms';
     return 'phone';
+}
+
+// Caller and status line. Mirrored notifications come as
+// title = app name, body = "Caller: text".
+export function callInfo(n) {
+    const body = (n.body ?? '').trim();
+    const sep = body.indexOf(': ');
+    if (DIALER.test(String(n.id ?? '')) && sep > 0)
+        return {name: body.slice(0, sep), text: body.slice(sep + 2)};
+    return {name: n.title ?? '', text: body};
+}
+
+// For logs: the notification key without numbers or personal parts.
+export function idShape(n) {
+    return String(n?.id ?? '').split('|').map(p => /^[a-z][\w.]+$/i.test(p) ? p : p.replace(/./g, '#').slice(0, 3)).join('|');
 }
 
 export function canReplyViaPhone(n) {
