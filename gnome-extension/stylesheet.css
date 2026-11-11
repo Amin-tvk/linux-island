@@ -1,3 +1,6 @@
+/* Sizes are in em so the "Size" setting (font-size on .li-island) scales
+   everything; 1em = 13px at size 1.0. */
+
 .li-island {
   background-color: rgba(0, 0, 0, 0.96);
   border: 1px solid rgba(255, 255, 255, 0.07);
@@ -5,66 +8,115 @@
   font-size: 13px;
 }
 
-.li-view { padding: 0 12px; spacing: 10px; }
-.li-compact { padding: 0 10px 0 6px; spacing: 9px; }
-.li-media-open, .li-idle-open { padding: 14px 18px 10px; spacing: 8px; }
-.li-notification { padding: 0 16px 0 14px; spacing: 12px; }
-.li-done { padding: 0 18px 0 16px; spacing: 10px; }
-.li-row { spacing: 10px; }
-.li-info { spacing: 2px; padding-left: 4px; }
+.li-view { padding: 0 0.92em; spacing: 0.77em; }
+.li-compact { padding: 0 0.77em 0 0.46em; spacing: 0.69em; }
+.li-media-open, .li-idle-open { padding: 1.08em 1.38em 0.77em; spacing: 0.62em; }
+.li-notification { padding: 0 1.23em 0 1.08em; spacing: 0.92em; }
+.li-notification-open { padding: 1em 1.23em 0.85em 1.08em; spacing: 0.62em; }
+.li-list { padding: 0.92em 0.92em 0.62em 1.08em; spacing: 0.46em; }
+.li-done { padding: 0 1.38em 0 1.23em; spacing: 0.77em; }
+.li-osd { padding: 0 1.08em; spacing: 0.77em; }
+.li-row { spacing: 0.77em; }
+.li-info { spacing: 0.15em; padding-left: 0.3em; }
 
 .li-cover {
   background-color: rgba(255, 255, 255, 0.10);
   color: rgba(255, 255, 255, 0.75);
 }
+.li-cover-btn { border-radius: 1em; }
 
-.li-mini-title { font-size: 12.5px; font-weight: 600; }
-.li-title { font-size: 15px; font-weight: 700; }
-.li-artist { font-size: 12.5px; color: rgba(255, 255, 255, 0.65); }
-.li-source { padding: 2px 0; border-radius: 6px; }
-.li-source-box { spacing: 5px; }
-.li-source-label { font-size: 11px; color: rgba(255, 255, 255, 0.45); }
+.li-mini-title { font-size: 0.96em; font-weight: 600; }
+.li-title { font-size: 1.15em; font-weight: 700; }
+.li-artist { font-size: 0.96em; color: rgba(255, 255, 255, 0.65); }
+.li-source { padding: 0.15em 0; border-radius: 0.46em; color: rgba(255, 255, 255, 0.45); }
+.li-source-box { spacing: 0.38em; }
+.li-source-label { font-size: 0.85em; color: rgba(255, 255, 255, 0.45); }
 .li-source:hover .li-source-label { color: rgba(255, 255, 255, 0.8); }
 
-.li-eq { spacing: 2px; padding-right: 4px; }
-.li-eq-bar { width: 3px; border-radius: 2px; background-color: #ffffff; }
+.li-eq { spacing: 0.15em; padding-right: 0.3em; }
+.li-eq-bar { border-radius: 0.15em; background-color: #ffffff; }
 
-.li-progress-row { spacing: 10px; }
+.li-progress-row { spacing: 0.77em; }
 .li-progress {
-  height: 5px;
-  border-radius: 3px;
+  height: 0.38em;
+  border-radius: 0.23em;
   background-color: rgba(255, 255, 255, 0.16);
 }
-.li-progress-fill { border-radius: 3px; background-color: #ffffff; }
-.li-time { font-size: 10.5px; color: rgba(255, 255, 255, 0.55); font-feature-settings: "tnum"; }
+.li-progress-fill { border-radius: 0.23em; background-color: #ffffff; }
+.li-osd-bar { height: 0.46em; }
+.li-time { font-size: 0.81em; color: rgba(255, 255, 255, 0.55); font-feature-settings: "tnum"; }
 
-.li-controls { spacing: 6px; }
-.li-ctrl-center { spacing: 18px; }
+.li-controls { spacing: 0.46em; }
+.li-ctrl-center { spacing: 1.38em; }
 .li-btn { border-radius: 99px; color: #ffffff; }
 .li-btn:hover { background-color: rgba(255, 255, 255, 0.12); }
 .li-btn:active { background-color: rgba(255, 255, 255, 0.22); }
-.li-ctrl { padding: 6px; }
-.li-play { padding: 8px; background-color: rgba(255, 255, 255, 0.12); }
-.li-small-btn { padding: 6px; color: rgba(255, 255, 255, 0.6); }
-.li-round-btn { padding: 8px; background-color: rgba(255, 255, 255, 0.10); }
+.li-ctrl { padding: 0.46em; }
+.li-play { padding: 0.62em; background-color: rgba(255, 255, 255, 0.12); }
+.li-small-btn { padding: 0.46em; color: rgba(255, 255, 255, 0.6); }
+.li-round-btn { padding: 0.62em; background-color: rgba(255, 255, 255, 0.10); }
+.li-send { background-color: rgba(76, 154, 255, 0.85); }
+.li-send:hover { background-color: rgba(76, 154, 255, 1); }
 
-.li-clock { font-size: 30px; font-weight: 300; }
-.li-date { font-size: 12.5px; color: rgba(255, 255, 255, 0.6); }
-.li-presets { spacing: 8px; padding-top: 6px; }
+.li-bell-box { spacing: 0.3em; }
+.li-bell-count { font-size: 0.81em; font-weight: 700; color: #ff6b6b; }
+.li-dot { border-radius: 99px; background-color: #ff6b6b; margin-right: 0.3em; }
+
+.li-clock { font-size: 2.3em; font-weight: 300; }
+.li-date { font-size: 0.96em; color: rgba(255, 255, 255, 0.6); }
+.li-presets { spacing: 0.62em; padding-top: 0.46em; }
 .li-preset {
-  padding: 6px 0;
-  font-size: 12.5px;
+  padding: 0.46em 0;
+  font-size: 0.96em;
   font-weight: 600;
   background-color: rgba(255, 255, 255, 0.10);
 }
-.li-timer-big { font-size: 22px; font-weight: 600; font-feature-settings: "tnum"; }
-.li-timer-small { font-size: 13px; font-weight: 600; color: #ffb35c; font-feature-settings: "tnum"; }
+.li-timer-big { font-size: 1.7em; font-weight: 600; font-feature-settings: "tnum"; }
+.li-timer-small { font-size: 1em; font-weight: 600; color: #ffb35c; font-feature-settings: "tnum"; }
 .li-dim-icon { color: rgba(255, 255, 255, 0.55); }
 .li-accent-icon { color: #ffb35c; }
 
-.li-notif-icon { border-radius: 10px; }
-.li-notif-app { font-size: 10.5px; color: rgba(255, 255, 255, 0.5); }
-.li-notif-title { font-size: 13.5px; font-weight: 700; }
-.li-notif-body { font-size: 12.5px; color: rgba(255, 255, 255, 0.72); }
-.li-done-label { font-size: 15px; font-weight: 700; }
-.li-source { color: rgba(255, 255, 255, 0.45); }
+.li-notif-icon { border-radius: 0.77em; }
+.li-notif-app { font-size: 0.81em; color: rgba(255, 255, 255, 0.5); }
+.li-notif-title { font-size: 1.04em; font-weight: 700; }
+.li-notif-body { font-size: 0.96em; color: rgba(255, 255, 255, 0.72); }
+.li-actions { spacing: 0.46em; }
+.li-chip {
+  padding: 0.38em 0.92em;
+  font-size: 0.88em;
+  font-weight: 600;
+  background-color: rgba(255, 255, 255, 0.10);
+}
+.li-chip-accent { background-color: rgba(76, 154, 255, 0.85); }
+.li-chip-accent:hover { background-color: rgba(76, 154, 255, 1); }
+.li-reply-row { spacing: 0.46em; }
+.li-entry {
+  padding: 0.46em 0.92em;
+  border-radius: 99px;
+  border: none;
+  background-color: rgba(255, 255, 255, 0.10);
+  color: #ffffff;
+  font-size: 0.96em;
+  caret-color: #ffffff;
+  selection-background-color: rgba(76, 154, 255, 0.6);
+}
+.li-entry:focus { background-color: rgba(255, 255, 255, 0.14); box-shadow: none; }
+.li-entry StLabel.hint-text { color: rgba(255, 255, 255, 0.4); }
+
+.li-list-box { spacing: 0.15em; }
+.li-list-btn { border-radius: 0.77em; padding: 0.46em 0.62em; }
+.li-list-btn:hover { background-color: rgba(255, 255, 255, 0.08); }
+.li-list-row { spacing: 0.77em; }
+.li-list-title { font-size: 0.96em; font-weight: 700; }
+.li-list-body { font-size: 0.88em; color: rgba(255, 255, 255, 0.65); }
+.li-empty { font-size: 0.96em; color: rgba(255, 255, 255, 0.45); }
+
+.li-osd-label { font-size: 0.96em; font-weight: 600; }
+.li-osd-value { font-size: 0.88em; font-weight: 600; color: rgba(255, 255, 255, 0.7); min-width: 2em; text-align: right; font-feature-settings: "tnum"; }
+.li-battery-value { font-size: 1em; font-weight: 700; }
+.li-battery-ok { color: #4cd964; }
+.li-battery-low { color: #ff5f57; }
+.li-done-label { font-size: 1.15em; font-weight: 700; }
+.li-tabs { spacing: 0.3em; }
+.li-chip-on { background-color: rgba(255, 255, 255, 0.24); }
+.li-queue-index { font-size: 0.85em; color: rgba(255, 255, 255, 0.4); font-feature-settings: "tnum"; }

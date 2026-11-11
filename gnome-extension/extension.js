@@ -8,7 +8,10 @@ import {ArtLoader} from './art.js';
 import {Island} from './island.js';
 import {MprisWatcher} from './mpris.js';
 import {NotificationWatcher} from './notifications.js';
+import {QuickReply} from './reply.js';
+import {BatteryWatcher, OsdRedirect} from './system.js';
 import {Timer} from './timer.js';
+import {Spectrum} from './visualizer.js';
 
 export default class LinuxIslandExtension extends Extension {
     enable() {
@@ -17,33 +20,39 @@ export default class LinuxIslandExtension extends Extension {
         this._mpris = new MprisWatcher();
         this._notifications = new NotificationWatcher(this._settings);
         this._timer = new Timer();
+        this._battery = new BatteryWatcher();
+        this._osd = new OsdRedirect(() => this._settings.get_boolean('replace-osd'));
+        this._spectrum = new Spectrum();
+        this._reply = new QuickReply(this._settings);
         this._island = new Island({
             settings: this._settings,
             mpris: this._mpris,
             notifications: this._notifications,
             timer: this._timer,
             art: this._art,
+            battery: this._battery,
+            osd: this._osd,
+            spectrum: this._spectrum,
+            reply: this._reply,
             openPrefs: () => this.openPreferences(),
         });
 
+        const mode = Shell.ActionMode.NORMAL | Shell.ActionMode.OVERVIEW;
         Main.wm.addKeybinding('toggle-island', this._settings,
-            Meta.KeyBindingFlags.NONE,
-            Shell.ActionMode.NORMAL | Shell.ActionMode.OVERVIEW,
-            () => this._island.toggle());
+            Meta.KeyBindingFlags.NONE, mode, () => this._island.toggle());
+        Main.wm.addKeybinding('toggle-list', this._settings,
+            Meta.KeyBindingFlags.NONE, mode, () => this._island.showList());
     }
 
     disable() {
         Main.wm.removeKeybinding('toggle-island');
+        Main.wm.removeKeybinding('toggle-list');
         this._island.destroy();
         this._island = null;
-        this._timer.destroy();
-        this._timer = null;
-        this._notifications.destroy();
-        this._notifications = null;
-        this._mpris.destroy();
-        this._mpris = null;
-        this._art.destroy();
-        this._art = null;
+        for (const name of ['_reply', '_spectrum', '_osd', '_battery', '_timer', '_notifications', '_mpris', '_art']) {
+            this[name].destroy();
+            this[name] = null;
+        }
         this._settings = null;
     }
 }

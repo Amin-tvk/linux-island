@@ -13,13 +13,60 @@
       <default>true</default>
       <summary>Hide GNOME's own notification banners (they still go to the message list)</summary>
     </key>
+    <key name="quick-reply" type="b">
+      <default>true</default>
+      <summary>Reply to messenger notifications from the island</summary>
+    </key>
+    <key name="reply-apps" type="as">
+      <default>['telegram', 'ayugram', 'kotatogram', '64gram', 'materialgram', 'whatsapp', 'zapzap', 'whatsie', 'signal', 'discord', 'vesktop', 'slack', 'element', 'skype', 'teams', 'bale', 'rubika', 'eitaa', 'soroush', 'gap', 'iGap']</default>
+      <summary>Apps whose notifications get a Reply button (matched against the app id or name)</summary>
+    </key>
+    <key name="replace-osd" type="b">
+      <default>true</default>
+      <summary>Show volume, brightness and keyboard-layout changes in the island</summary>
+    </key>
+    <key name="show-battery" type="b">
+      <default>true</default>
+      <summary>Show charger and low-battery events</summary>
+    </key>
+    <key name="scroll-volume" type="b">
+      <default>true</default>
+      <summary>Scroll up / down on the island to change the volume</summary>
+    </key>
+    <key name="peek-on-track-change" type="b">
+      <default>true</default>
+      <summary>Briefly expand when the song changes</summary>
+    </key>
+    <key name="visualizer" type="s">
+      <choices>
+        <choice value="bars"/>
+        <choice value="glow"/>
+        <choice value="off"/>
+      </choices>
+      <default>'bars'</default>
+      <summary>Audio visualizer around the island</summary>
+    </key>
+    <key name="glow" type="b">
+      <default>true</default>
+      <summary>Soft glow in the cover-art colour while music plays</summary>
+    </key>
     <key name="hide-when-idle" type="b">
       <default>false</default>
       <summary>Hide the island completely when nothing is happening</summary>
     </key>
     <key name="expand-on-hover" type="b">
       <default>true</default>
-      <summary>Expand the media view when the pointer hovers the island</summary>
+      <summary>Expand when the pointer hovers the island</summary>
+    </key>
+    <key name="scale" type="d">
+      <range min="0.7" max="1.6"/>
+      <default>1.0</default>
+      <summary>Size of the island</summary>
+    </key>
+    <key name="animation-speed" type="d">
+      <range min="0.5" max="2.5"/>
+      <default>1.0</default>
+      <summary>Animation speed (higher is faster)</summary>
     </key>
     <key name="top-margin" type="i">
       <range min="0" max="200"/>
@@ -38,6 +85,10 @@
     <key name="toggle-island" type="as">
       <default><![CDATA[['<Super><Alt>h']]]></default>
       <summary>Shortcut to expand / collapse the island</summary>
+    </key>
+    <key name="toggle-list" type="as">
+      <default><![CDATA[['<Super><Alt>n']]]></default>
+      <summary>Shortcut to show the notification list</summary>
     </key>
   </schema>
 </schemalist>
