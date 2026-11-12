@@ -164,3 +164,16 @@
 .li-call-answer:hover { background-color: #3ee06a; }
 .li-call-decline { background-color: #ff453a; color: #ffffff; padding: 0.7em; }
 .li-call-decline:hover { background-color: #ff6159; }
+
+/* screen time */
+.li-usage-chip { font-size: 0.85em; }
+.li-usage-total { font-size: 1.85em; font-weight: 700; }
+.li-usage-week { spacing: 0.35em; padding-right: 0.6em; }
+.li-usage-col { spacing: 0.2em; }
+.li-usage-bar { background-color: rgba(255, 255, 255, 0.28); border-radius: 0.2em; }
+.li-usage-day { font-size: 0.7em; color: rgba(255, 255, 255, 0.45); }
+.li-usage-apps { spacing: 0.55em; padding-top: 0.6em; }
+.li-usage-row { spacing: 0.7em; }
+.li-usage-track { background-color: rgba(255, 255, 255, 0.10); border-radius: 0.2em; margin-top: 0.25em; }
+.li-usage-fill { border-radius: 0.2em; }
+.li-usage-time { font-size: 0.9em; color: rgba(255, 255, 255, 0.7); font-feature-settings: "tnum"; }

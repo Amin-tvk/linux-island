@@ -19,6 +19,7 @@ import {Aura} from './visualizer.js';
 import {callInfo, canReplyViaPhone, idShape, isGenericPhoneMirror, phoneKind, replyViaPhone, sourceApp} from './phone.js';
 import {formatNumber} from './telephony.js';
 import {formatTime, formatUs} from './timer.js';
+import {formatDuration} from './usage.js';
 
 // [width, height] of the island in each state, at scale 1.
 const SIZES = {
@@ -31,6 +32,7 @@ const SIZES = {
     'notification-open': [420, 170],
     'list': [420, 320],
     'queue': [420, 320],
+    'usage': [420, 262],
     'osd': [280, 38],
     'event': [320, 40],
     'call': [420, 92],
@@ -407,6 +409,7 @@ class Island extends St.Widget {
         this._expanded = false;
         this._toolsOpen = false;
         this._listOpen = false;
+        this._usageOpen = false;
         this._queueOpen = false;
         this._queueTab = 'queue';
         this._queue = [];
@@ -543,6 +546,7 @@ class Island extends St.Widget {
         this._buildNotification();
         this._buildNotificationOpen();
         this._buildList();
+        this._buildUsage();
         this._buildQueue();
         this._buildOsd();
         this._buildEvent();
@@ -641,6 +645,8 @@ class Island extends St.Widget {
         side.add_child(weather);
         top.add_child(this._clockLabel);
         top.add_child(side);
+        this._usageChip = this._textButton('', 'li-chip li-usage-chip', () => this._openUsage(), {y_align: Clutter.ActorAlign.CENTER});
+        top.add_child(this._usageChip);
         top.add_child(this._bellButton());
         top.add_child(this._iconButton('emblem-system-symbolic', 'li-small-btn', 14, () => {
             this._collapse();
@@ -704,6 +710,7 @@ class Island extends St.Widget {
     }
 
     _syncTools() {
+        this._syncUsageChip();
         const {pomodoro, stopwatch, focus, calendar, alarms} = this._x;
         this._pomodoroChip.label = pomodoro.active ? '🍅 Stop' : '🍅 Pomodoro';
         this._pomodoroChip.style_class = `li-btn li-chip${pomodoro.active ? ' li-chip-tomato' : ''}`;
@@ -947,6 +954,105 @@ class Island extends St.Widget {
         this._addView('list', box);
     }
 
+    // Today's screen time, the last week, and the most used apps.
+    _buildUsage() {
+        const box = new St.BoxLayout({style_class: 'li-view li-list', orientation: Clutter.Orientation.VERTICAL});
+        const header = new St.BoxLayout({style_class: 'li-row'});
+        const head = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, x_expand: true});
+        head.add_child(label('Screen time today', 'li-notif-app'));
+        this._usageTotal = label('', 'li-usage-total');
+        head.add_child(this._usageTotal);
+        header.add_child(head);
+        // Seven small bars, today highlighted.
+        this._usageWeek = new St.BoxLayout({style_class: 'li-usage-week', y_align: Clutter.ActorAlign.END});
+        this._usageBars = [];
+        for (let i = 0; i < 7; i++) {
+            const col = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, style_class: 'li-usage-col'});
+            const bar = new St.Widget({style_class: 'li-usage-bar', width: this._px(8), height: this._px(2),
+                x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.END, y_expand: true});
+            const day = label('', 'li-usage-day', {x_align: Clutter.ActorAlign.CENTER});
+            const holder = new St.Widget({layout_manager: new Clutter.BinLayout(), height: this._px(34)});
+            holder.add_child(bar);
+            col.add_child(holder);
+            col.add_child(day);
+            this._usageWeek.add_child(col);
+            this._usageBars.push({bar, day});
+        }
+        header.add_child(this._usageWeek);
+        header.add_child(this._iconButton('window-close-symbolic', 'li-small-btn', 14, () => this._collapse()));
+        box.add_child(header);
+        this._usageApps = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, style_class: 'li-usage-apps', x_expand: true, y_expand: true});
+        box.add_child(this._usageApps);
+        this._addView('usage', box);
+    }
+
+    _syncUsageChip() {
+        if (!this._usageChip)
+            return;
+        const show = this._settings.get_boolean('screen-time');
+        this._usageChip.visible = show;
+        if (show)
+            this._usageChip.label = `⌛ ${formatDuration(this._x.screenTime.todayTotal)}`;
+    }
+
+    _syncUsage() {
+        const st = this._x.screenTime;
+        this._usageTotal.text = formatDuration(st.todayTotal);
+        const week = st.week();
+        const max = Math.max(...week.map(d => d.secs), 1);
+        week.forEach((d, i) => {
+            const {bar, day} = this._usageBars[i];
+            bar.height = Math.max(this._px(2), Math.round(d.secs / max * this._px(34)));
+            bar.style_class = `li-usage-bar${d.today ? ' li-usage-today' : ''}`;
+            if (d.today)
+                bar.style = `background-color: ${rgba(this._accent, 1)};`;
+            else
+                bar.style = '';
+            day.text = d.label;
+        });
+
+        this._usageApps.destroy_all_children();
+        const apps = st.topApps(5);
+        if (apps.length === 0) {
+            this._usageApps.add_child(label('Counting starts now – check back in a little while', 'li-empty',
+                {x_align: Clutter.ActorAlign.CENTER, y_expand: true}));
+            return;
+        }
+        const most = apps[0].secs;
+        for (const a of apps) {
+            const row = new St.BoxLayout({style_class: 'li-row li-usage-row', x_expand: true});
+            row.add_child(new St.Icon({gicon: a.app?.get_icon() ?? new Gio.ThemedIcon({name: 'application-x-executable-symbolic'}),
+                icon_size: this._px(22), y_align: Clutter.ActorAlign.CENTER}));
+            const mid = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, x_expand: true, y_align: Clutter.ActorAlign.CENTER});
+            mid.add_child(label(a.name, 'li-list-title'));
+            const track = new St.Widget({style_class: 'li-usage-track', x_expand: true, height: this._px(4)});
+            const fill = new St.Widget({style_class: 'li-usage-fill', x: 0, y: 0, height: this._px(4),
+                style: `background-color: ${rgba(this._accent, 0.9)};`});
+            track.add_child(fill);
+            // The fill is a share of the track, set once the track has a width.
+            track.connect('notify::allocation', () => {
+                const width = Math.max(this._px(4), Math.round(track.width * a.secs / most));
+                if (fill.width !== width)
+                    fill.width = width;
+            });
+            mid.add_child(track);
+            row.add_child(mid);
+            const time = label(formatDuration(a.secs), 'li-usage-time', {y_align: Clutter.ActorAlign.CENTER});
+            time.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
+            row.add_child(time);
+            this._usageApps.add_child(row);
+        }
+    }
+
+    _openUsage() {
+        this._usageOpen = true;
+        this._toolsOpen = false;
+        this._expanded = false;
+        this._update();
+        if (!this.hover)
+            this._restartTimeout('collapse', AUTO_COLLAPSE * 2, () => this._collapse());
+    }
+
     _buildQueue() {
         const box = new St.BoxLayout({style_class: 'li-view li-list', orientation: Clutter.Orientation.VERTICAL});
         const header = new St.BoxLayout({style_class: 'li-row'});
@@ -1182,6 +1288,11 @@ class Island extends St.Widget {
         }, this);
         this._settings.connectObject('changed::alarms', () => this._syncToolsIfOpen(), this);
         this._x.btCalls.connectObject('changed', () => this._onBtCalls(), this);
+        this._x.screenTime.connectObject('changed', () => {
+            this._syncToolsIfOpen();
+            if (this._state === 'usage')
+                this._syncUsage();
+        }, this);
         this._x.gsconnect.connectObject(
             'changed', () => {
                 this._onPhoneStatusChanged();
@@ -1384,6 +1495,8 @@ class Island extends St.Widget {
             return 'event';
         if (this._listOpen)
             return 'list';
+        if (this._usageOpen)
+            return 'usage';
         if (this._queueOpen && this._hasMedia())
             return 'queue';
         if (this._toolsOpen)
@@ -1467,6 +1580,8 @@ class Island extends St.Widget {
         }
         if (state === 'list')
             this._syncList();
+        if (state === 'usage')
+            this._syncUsage();
     }
 
     _updateVisibility() {
@@ -2368,7 +2483,7 @@ class Island extends St.Widget {
                 this._restartTimeout('expand', this._ms(EXPAND_DELAY), () => this._expand());
         } else {
             this._clearTimeout('expand');
-            if ((this._expanded || this._toolsOpen || this._listOpen || this._queueOpen) && !this._replying)
+            if ((this._expanded || this._toolsOpen || this._listOpen || this._usageOpen || this._queueOpen) && !this._replying)
                 this._restartTimeout('collapse', this._ms(COLLAPSE_DELAY), () => this._collapse());
         }
     }
@@ -2435,7 +2550,7 @@ class Island extends St.Widget {
         else if (dir === Clutter.ScrollDirection.RIGHT)
             dx = 1;
 
-        if (this._state === 'list' || this._state === 'queue')
+        if (this._state === 'list' || this._state === 'queue' || this._state === 'usage')
             return Clutter.EVENT_PROPAGATE;
 
         // Sideways: previous / next track.
@@ -2479,6 +2594,7 @@ class Island extends St.Widget {
         this._expanded = false;
         this._toolsOpen = false;
         this._listOpen = false;
+        this._usageOpen = false;
         this._queueOpen = false;
         this._update();
     }
@@ -2490,7 +2606,7 @@ class Island extends St.Widget {
             this._nextNotification();
         } else if (this._state === 'done') {
             this._dismissDone();
-        } else if (this._expanded || this._toolsOpen || this._listOpen || this._queueOpen) {
+        } else if (this._expanded || this._toolsOpen || this._listOpen || this._usageOpen || this._queueOpen) {
             this._collapse();
         } else {
             this._expand();

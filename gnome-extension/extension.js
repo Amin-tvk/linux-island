@@ -15,6 +15,7 @@ import {BatteryWatcher, OsdRedirect} from './system.js';
 import {AlarmClock, Pomodoro, Stopwatch, Timer} from './timer.js';
 import {BluetoothCalls} from './telephony.js';
 import {Spectrum} from './visualizer.js';
+import {ScreenTime} from './usage.js';
 import {
     BluetoothWatcher, CalendarWatcher, ClipboardWatcher, FocusMode, GSConnectPhones, PhoneBatteryWatcher,
     PrivacyWatcher, WeatherWatcher,
@@ -45,6 +46,7 @@ export default class LinuxIslandExtension extends Extension {
             btCalls: new BluetoothCalls(),
             phoneBattery: new PhoneBatteryWatcher(),
             gsconnect: new GSConnectPhones(),
+            screenTime: new ScreenTime(this._settings),
         };
         this._island = new Island({
             settings: this._settings,

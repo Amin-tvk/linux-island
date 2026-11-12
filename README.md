@@ -40,6 +40,8 @@
 **Time**
 - **Timer** with presets (1 / 5 / 10 / 25 min by default), pause, stop, a sound and an orange glow when time is up. Click the idle pill for the clock and timer.
 - **Pomodoro**: 25 min focus / 5 min break, a long break every 4 rounds (all adjustable), with the round and time left in the pill.
+- **Screen time**: the hourglass chip in the expanded island shows today's time at the computer; click it for the last seven days and the most used apps. Only counts while you are there (not locked, not idle for 2 min unless a fullscreen video plays) and stays on this computer (`~/.local/share/linux-island/usage.json`, two weeks).
+- **While music plays**: the cover turns like a record, a long title scrolls, a thin edge takes the cover's colour, and in ghost mode the pill fades away from the pointer and lets clicks through (rest the pointer on it or hold Super to use it).
 - **Stopwatch** that keeps running in the pill.
 - **Daily alarms** (set them in Settings), shown in the clock view; they ring and glow until you click.
 - **Up to the minute**: everything that runs (recording, call, Pomodoro, timer, stopwatch) shows as a compact live activity, also next to the music.
@@ -218,7 +220,7 @@ MIT – see [LICENSE](LICENSE).
 
 ## فارسی
 
-**Linux Island** یک «دایناميک آیلند» برای لینوکس است: یک قرص مشکی بالای صفحه که آهنگ در حال پخش را نشان می‌دهد، نوتیفیکیشن‌ها را نمایش می‌دهد و می‌شود همان‌جا به پیام‌های تلگرام و بقیه‌ی پیام‌رسان‌ها جواب داد. **تماس و پیامک گوشی** (با GSConnect)، هدفون بلوتوث، نقطه‌های میکروفون/دوربین/ضبط صفحه، یادآور جلسه، پومودورو، کرنومتر، آلارم، آب‌وهوا، حالت مزاحم نشو، پلی‌لیست، تغییر صدا و روشنایی و شارژ باتری هم دارد. سایز و سرعت انیمیشن قابل تنظیم است.
+**Linux Island** یک «دایناميک آیلند» برای لینوکس است: یک قرص مشکی بالای صفحه که آهنگ در حال پخش را نشان می‌دهد، نوتیفیکیشن‌ها را نمایش می‌دهد و می‌شود همان‌جا به پیام‌های تلگرام و بقیه‌ی پیام‌رسان‌ها جواب داد. **تماس و پیامک گوشی** (با GSConnect)، هدفون بلوتوث، نقطه‌های میکروفون/دوربین/ضبط صفحه، یادآور جلسه، پومودورو، کرنومتر، آلارم، آب‌وهوا، حالت مزاحم نشو، **اسکرین تایم** (زمان استفاده امروز، هفت روز اخیر و پراستفاده‌ترین برنامه‌ها)، پلی‌لیست، تغییر صدا و روشنایی و شارژ باتری هم دارد. سایز و سرعت انیمیشن قابل تنظیم است.
 
 **وصل کردن گوشی:** روی کامپیوتر <code>sudo apt install gnome-shell-extension-gsconnect</code> را نصب کنید، روی گوشی اپ **KDE Connect** را نصب و جفت کنید (هر دو روی یک وای‌فای). از این به بعد تماس‌ها و پیامک‌ها در آیلند نشان داده می‌شوند.
 

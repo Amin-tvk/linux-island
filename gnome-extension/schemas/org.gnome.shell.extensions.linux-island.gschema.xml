@@ -37,6 +37,10 @@
       <default>true</default>
       <summary>Briefly expand when the song changes</summary>
     </key>
+    <key name="screen-time" type="b">
+      <default>true</default>
+      <summary>Count screen time and the most used apps (kept on this computer only)</summary>
+    </key>
     <key name="ghost-mode" type="b">
       <default>true</default>
       <summary>While music plays, fade away from the pointer and let clicks through; rest the pointer on it or hold Super to use it</summary>

@@ -58,6 +58,8 @@ export default class LinuxIslandPreferences extends ExtensionPreferences {
         const content = new Adw.PreferencesGroup({title: 'What to show'});
         content.add(switchRow('show-media', 'Now playing', 'Any app that supports MPRIS: browsers, Spotify, VLC, Rhythmbox…'));
         content.add(switchRow('peek-on-track-change', 'Peek at new songs', 'Briefly expand when the track changes'));
+        content.add(switchRow('screen-time', 'Screen time',
+            'Time at the computer today and the most used apps. Stays on this computer'));
         content.add(switchRow('ghost-mode', 'Ghost mode while playing',
             'Fades away from the pointer and lets clicks through. Rest the pointer on it or hold Super to use it'));
         content.add(switchRow('show-notifications', 'Notifications'));
