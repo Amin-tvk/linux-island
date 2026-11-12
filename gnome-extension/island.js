@@ -1996,11 +1996,16 @@ class Island extends St.Widget {
         this._doneTitle.text = title;
         this._doneSub.text = subtitle ?? '';
         this._doneSub.visible = !!subtitle;
-        const play = () => global.display.get_sound_player().play_from_theme(sound, title, null);
+        // Cancelled on dismiss, which also cuts off a sound that is still playing.
+        this._doneSound?.cancel();
+        const cancellable = new Gio.Cancellable();
+        this._doneSound = cancellable;
+        const play = () => global.display.get_sound_player().play_from_theme(sound, title, cancellable);
         play();
+        this._clearTimeout('done-sound');
         if (repeat) {
-            this._clearTimeout('done-sound');
-            this._setTimeout('done-sound', 4000, () => {
+            // Not before the alarm sound (about 6 s) has finished.
+            this._setTimeout('done-sound', 7000, () => {
                 play();
                 return GLib.SOURCE_CONTINUE;
             });
@@ -2013,6 +2018,8 @@ class Island extends St.Widget {
     _dismissDone() {
         this._clearTimeout('done');
         this._clearTimeout('done-sound');
+        this._doneSound?.cancel();
+        this._doneSound = null;
         this._done = null;
         this._update();
     }
@@ -2623,6 +2630,7 @@ class Island extends St.Widget {
     }
 
     _onDestroy() {
+        this._doneSound?.cancel();
         if (this._ghost)
             global.stage.disconnect(this._ghostCapture);
         this._ghost = null;
