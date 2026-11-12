@@ -5,5 +5,5 @@
   "shell-version": ["46", "47", "48", "49", "50"],
   "settings-schema": "org.gnome.shell.extensions.linux-island",
   "url": "https://github.com/Amin-tvk/linux-island",
-  "version": 14
+  "version": 15
 }

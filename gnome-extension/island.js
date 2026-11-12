@@ -5,6 +5,7 @@ import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
+import Graphene from 'gi://Graphene';
 import Pango from 'gi://Pango';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
@@ -44,6 +45,12 @@ const GROW_TIME = 300;
 const SHRINK_TIME = 230;
 const PEEK_TIME = 2800;
 const OSD_TIME = 1500;
+const SPIN_TIME = 6000;     // one turn of the record
+const MARQUEE_SPEED = 28;   // px per second, at scale 1
+const MARQUEE_PAUSE = 1800; // rest at the start of each pass
+const GHOST_OPACITY = 40;
+const GHOST_DWELL = 600;    // hold the pointer still this long to use the island
+const GHOST_POLL = 40;
 const EVENT_TIME = 3000;
 
 const BATTERY_TEXT = {
@@ -106,18 +113,60 @@ function timeAgo(datetime) {
 const Cover = GObject.registerClass(
 class Cover extends St.Bin {
     constructor(size, radius) {
-        super({style_class: 'li-cover', width: size, height: size, y_align: Clutter.ActorAlign.CENTER});
+        super({style_class: 'li-cover', width: size, height: size, y_align: Clutter.ActorAlign.CENTER,
+            pivot_point: new Graphene.Point({x: 0.5, y: 0.5})});
+        this._size = size;
         this._radius = radius;
+        this._record = false;
         this._fallback = new St.Icon({icon_name: 'audio-x-generic-symbolic', icon_size: Math.round(size * 0.5)});
+        // The spindle hole of the record.
+        const hole = Math.max(4, Math.round(size / 5));
+        this._hole = new St.Widget({style_class: 'li-record-hole', width: hole, height: hole,
+            x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER,
+            style: `border-radius: ${hole / 2}px;`});
+        this._spin = new Clutter.PropertyTransition({property_name: 'rotation-angle-z',
+            duration: SPIN_TIME, repeat_count: -1, progress_mode: Clutter.AnimationMode.LINEAR});
+        this._spin.set_from(0);
+        this._spin.set_to(360);
+        this._spinning = false;
+        this.connect('destroy', () => this.remove_all_transitions());
         this.setArt(null, null);
     }
 
+    // Round, with a hole, turning while @playing: a record on a turntable.
+    setRecord(record, playing) {
+        if (record !== this._record) {
+            this._record = record;
+            this.setArt(this._path, this._gicon);
+        }
+        const spin = record && playing && !!this._path;
+        if (spin === this._spinning)
+            return;
+        this._spinning = spin;
+        if (spin) {
+            // Carry on from where it stopped.
+            const from = this.rotation_angle_z % 360;
+            this._spin.set_from(from);
+            this._spin.set_to(from + 360);
+            this.add_transition('spin', this._spin);
+            this._spin.start();
+        } else {
+            this.remove_transition('spin');
+            if (!record)
+                this.rotation_angle_z = 0;
+        }
+    }
+
     setArt(path, gicon) {
+        this._path = path;
+        this._gicon = gicon;
         if (path) {
             const uri = GLib.filename_to_uri(path, null).replace(/"/g, '%22');
-            this.style = `border-radius: ${this._radius}px; background-image: url("${uri}"); background-size: cover;`;
-            this.child = null;
+            const radius = this._record ? this._size / 2 : this._radius;
+            this.style = `border-radius: ${radius}px; background-image: url("${uri}"); background-size: cover;`;
+            this.child = this._record ? this._hole : null;
         } else {
+            this.rotation_angle_z = 0;
             this.style = `border-radius: ${this._radius}px;`;
             this._fallback.gicon = gicon ?? new Gio.ThemedIcon({name: 'audio-x-generic-symbolic'});
             if (!this.child)
@@ -181,6 +230,118 @@ class Equalizer extends St.BoxLayout {
             const v = Math.min(1, levels[band] ?? 0);
             this._bars[i].remove_all_transitions();
             this._bars[i].height = Math.round(this._min + v * (this._max - this._min));
+        });
+    }
+});
+
+// A one-line label that scrolls slowly when the text is too long to fit,
+// resting at the start of each pass. Takes no width of its own.
+const Marquee = GObject.registerClass(
+class Marquee extends St.Widget {
+    constructor(styleClass, scale) {
+        super({x_expand: true, clip_to_allocation: true, y_align: Clutter.ActorAlign.CENTER});
+        this._speed = MARQUEE_SPEED * scale;
+        this._strip = new St.BoxLayout();
+        this._a = new St.Label({style_class: styleClass, y_align: Clutter.ActorAlign.CENTER});
+        this._b = new St.Label({style_class: styleClass, y_align: Clutter.ActorAlign.CENTER});
+        for (const l of [this._a, this._b])
+            l.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
+        this._gap = Math.round(40 * scale);
+        this._b.style = `margin-left: ${this._gap}px;`;
+        this._strip.add_child(this._a);
+        this._strip.add_child(this._b);
+        this.add_child(this._strip);
+        this._running = false;
+        this._overflow = false;
+        this._laterId = 0;
+        this.connect('destroy', () => this._stopPass());
+    }
+
+    set text(text) {
+        if (this._a.text === text)
+            return;
+        this._a.text = this._b.text = text;
+        this._restart();
+    }
+
+    get text() {
+        return this._a.text;
+    }
+
+    // Scrolls while @running and the text overflows.
+    set running(running) {
+        if (running === this._running)
+            return;
+        this._running = running;
+        this._restart();
+    }
+
+    vfunc_get_preferred_width(_forHeight) {
+        return [0, 0];
+    }
+
+    vfunc_get_preferred_height(forWidth) {
+        return this._a.get_preferred_height(forWidth);
+    }
+
+    vfunc_allocate(box) {
+        this.set_allocation(box);
+        const [, natW] = this._strip.get_preferred_width(-1);
+        const [, natH] = this._strip.get_preferred_height(-1);
+        const h = box.get_height();
+        const child = new Clutter.ActorBox();
+        const y = Math.round((h - natH) / 2);
+        child.set_origin(0, y);
+        child.set_size(natW, natH);
+        this._strip.allocate(child);
+        const overflow = this._a.get_preferred_width(-1)[1] > box.get_width() + 1;
+        if (overflow !== this._overflow) {
+            this._overflow = overflow;
+            // Not from inside allocation.
+            if (!this._laterId) {
+                this._laterId = GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
+                    this._laterId = 0;
+                    this._restart();
+                    return GLib.SOURCE_REMOVE;
+                });
+            }
+        }
+    }
+
+    _stopPass() {
+        if (this._laterId)
+            GLib.source_remove(this._laterId);
+        this._laterId = 0;
+        if (this._restId)
+            GLib.source_remove(this._restId);
+        this._restId = 0;
+        this._strip.remove_all_transitions();
+    }
+
+    _restart() {
+        this._stopPass();
+        this._strip.translation_x = 0;
+        this._b.visible = this._overflow;
+        if (this._running && this._overflow)
+            this._pass();
+    }
+
+    _pass() {
+        this._restId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, MARQUEE_PAUSE, () => {
+            this._restId = 0;
+            const distance = this._a.width + this._gap;
+            this._strip.ease({
+                translation_x: -distance,
+                duration: Math.round(distance / this._speed * 1000),
+                mode: Clutter.AnimationMode.LINEAR,
+                onStopped: finished => {
+                    if (!finished)
+                        return;
+                    this._strip.translation_x = 0;
+                    this._pass();
+                },
+            });
+            return GLib.SOURCE_REMOVE;
         });
     }
 });
@@ -270,6 +431,12 @@ class Island extends St.Widget {
             layout_manager: new Clutter.BinLayout(),
         });
         this.add_child(this._clip);
+        // A hairline in the colour of the cover while music plays.
+        this._ring = new St.Widget({style_class: 'li-ring', x_expand: true, y_expand: true, opacity: 0});
+        this.add_child(this._ring);
+        this._ringColor = null;
+        this._ghost = null;
+        this._ghostSolid = false;
         this._build();
 
         this.connect('notify::hover', () => this._onHover());
@@ -322,6 +489,8 @@ class Island extends St.Widget {
             }
             this._relayout();
             this._update();
+            this._restyle();
+            this._updateTickers();
         }, this);
 
         this._relayout();
@@ -599,7 +768,7 @@ class Island extends St.Widget {
     _buildMedia() {
         const box = new St.BoxLayout({style_class: 'li-view li-compact'});
         this._miniCover = new Cover(this._px(24), this._px(7));
-        this._miniTitle = label('', 'li-mini-title', {x_expand: true});
+        this._miniTitle = new Marquee('li-mini-title', this._scale);
         this._miniEq = new Equalizer(this._px(14), this._px(3));
         this._miniTimer = label('', 'li-timer-small');
         this._miniTimer.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
@@ -1235,6 +1404,8 @@ class Island extends St.Widget {
             return;
         const old = this._state;
         this._state = state;
+        if (state !== 'media')
+            this._endGhost(false);
 
         const [w, h] = this._size(state);
         const growing = !old || w * h >= SIZES[old][0] * SIZES[old][1] * this._scale ** 2;
@@ -1301,9 +1472,11 @@ class Island extends St.Widget {
     _updateVisibility() {
         const hidden = this._suspended || this._bannerShown ||
             (this._state === 'idle' && this._settings.get_boolean('hide-when-idle'));
-        this.reactive = !hidden;
+        // A ghost lets clicks through to the window below.
+        this.reactive = !hidden && !this._ghost;
         this._notifications.blocked = this._suspended;
-        this.ease({opacity: hidden ? 0 : 255, duration: this._ms(150), mode: Clutter.AnimationMode.EASE_OUT_QUAD});
+        this.ease({opacity: hidden ? 0 : this._ghost ? GHOST_OPACITY : 255,
+            duration: this._ms(150), mode: Clutter.AnimationMode.EASE_OUT_QUAD});
         if (this._views)
             this._updateTickers();
         this._syncPrivacy();
@@ -1333,6 +1506,10 @@ class Island extends St.Widget {
             this._aura.mode = mode;
             this._aura.active = showing && mode !== 'off';
         }
+        const compact = this._state === 'media' && playing && !this._suspended && !this._bannerShown;
+        this._miniTitle.running = compact;
+        this._miniCover.setRecord(this._settings.get_boolean('vinyl'), compact);
+        this._syncRing();
         const real = this._spectrum.running;
         if (this._state === 'media' && playing && !real)
             this._miniEq.start();
@@ -1447,12 +1624,126 @@ class Island extends St.Widget {
         else if (glow && this._state?.startsWith('media') && playing && this._settings.get_boolean('glow'))
             shadow = `box-shadow: 0 2px ${this._px(18)}px 0 ${rgba(this._accent, 0.32)};`;
         this.style = `font-size: ${(13 * this._scale).toFixed(2)}px; border-radius: ${radius}px; ${shadow}`;
+        this._ringRadius = radius;
+        this._syncRing();
         if (this._aura) {
             this._aura.radius = radius;
             this._aura.color = this._accent;
             this._aura.scale = this._scale;
             this._aura.setMargin(this._px(14));
         }
+    }
+
+    // The cover-coloured edge; a new colour fades out and back in.
+    _syncRing() {
+        if (!this._ring)
+            return;
+        const show = this._settings.get_boolean('art-tint') && this._state?.startsWith('media') &&
+            this._mpris.active?.status === 'Playing';
+        const style = `border-radius: ${this._ringRadius ?? 0}px; border: ${Math.max(1, this._px(1.5))}px solid ${rgba(this._accent, 0.75)};`;
+        if (!show) {
+            if (!this._ringShown && style === this._ringStyle)
+                return;
+            this._ringShown = false;
+            this._ringStyle = style;
+            this._ring.ease({opacity: 0, duration: this._ms(250), mode: Clutter.AnimationMode.EASE_OUT_QUAD});
+            this._ring.style = style;
+            this._ringColor = String(this._accent);
+            return;
+        }
+        const color = String(this._accent);
+        if (style === this._ringStyle && this._ringShown)
+            return;
+        this._ringStyle = style;
+        this._ringShown = true;
+        if (color === this._ringColor || this._ring.opacity === 0) {
+            this._ring.style = style;
+            this._ringColor = color;
+            this._ring.ease({opacity: 255, duration: this._ms(400), mode: Clutter.AnimationMode.EASE_OUT_QUAD});
+            return;
+        }
+        this._ringColor = color;
+        this._ring.ease({
+            opacity: 0,
+            duration: this._ms(300),
+            mode: Clutter.AnimationMode.EASE_IN_QUAD,
+            onStopped: () => {
+                this._ring.style = style;
+                this._ring.ease({opacity: 255, duration: this._ms(500), mode: Clutter.AnimationMode.EASE_OUT_QUAD});
+            },
+        });
+    }
+
+    // ---- ghost -------------------------------------------------------------
+
+    // While music plays the pill fades away from the pointer and lets clicks
+    // through. Holding the pointer still on it (or holding Super) brings it
+    // back to be used.
+    _ghostable() {
+        return this._state === 'media' && this._settings.get_boolean('ghost-mode') &&
+            !this._ghostSolid && !this._suspended && !this._bannerShown;
+    }
+
+    _startGhost() {
+        if (this._ghost)
+            return;
+        this._ghost = {still: 0, x: -1, y: -1, busy: false};
+        this._clearTimeout('expand');
+        // Clicking through means the window below is being used: stay out of the way.
+        this._ghostCapture = global.stage.connect('captured-event', (_s, event) => {
+            const type = event.type();
+            if (this._ghost && (type === Clutter.EventType.BUTTON_PRESS || type === Clutter.EventType.TOUCH_BEGIN))
+                this._ghost.busy = true;
+            return Clutter.EVENT_PROPAGATE;
+        });
+        this._updateVisibility();
+        this._setTimeout('ghost', GHOST_POLL, () => this._pollGhost());
+    }
+
+    _pollGhost() {
+        const g = this._ghost;
+        if (!g)
+            return GLib.SOURCE_REMOVE;
+        const [x, y, mods] = global.get_pointer();
+        const [ax, ay] = this.get_transformed_position();
+        const inside = x >= ax && y >= ay && x < ax + this.width && y < ay + this.height;
+        if (!inside || this._state !== 'media') {
+            this._endGhost(false);
+            return GLib.SOURCE_REMOVE;
+        }
+        if (mods & (Clutter.ModifierType.SUPER_MASK | Clutter.ModifierType.MOD4_MASK)) {
+            this._endGhost(true);
+            return GLib.SOURCE_REMOVE;
+        }
+        const moved = Math.abs(x - g.x) > 3 || Math.abs(y - g.y) > 3;
+        g.x = x;
+        g.y = y;
+        const still = moved || g.busy ? 0 : g.still + GHOST_POLL;
+        if (still >= GHOST_DWELL) {
+            this._endGhost(true);
+            return GLib.SOURCE_REMOVE;
+        }
+        if (still !== g.still) {
+            // Fills back in while the pointer rests: the dwell's progress.
+            this.remove_transition('opacity');
+            this.opacity = Math.round(GHOST_OPACITY + (255 - GHOST_OPACITY) * still / GHOST_DWELL);
+        } else if (still === 0 && this.opacity !== GHOST_OPACITY) {
+            this.ease({opacity: GHOST_OPACITY, duration: this._ms(120)});
+        }
+        g.still = still;
+        return GLib.SOURCE_CONTINUE;
+    }
+
+    _endGhost(solid) {
+        if (!this._ghost)
+            return;
+        this._ghost = null;
+        this._clearTimeout('ghost');
+        global.stage.disconnect(this._ghostCapture);
+        this._ghostSolid = solid;
+        this._updateVisibility();
+        if (solid)
+            this.sync_hover();
     }
 
     // ---- media -------------------------------------------------------------
@@ -2061,6 +2352,12 @@ class Island extends St.Widget {
     // ---- input -------------------------------------------------------------
 
     _onHover() {
+        if (this.hover && this._ghostable()) {
+            this._startGhost();
+            return;
+        }
+        if (!this.hover && !this._ghost)
+            this._ghostSolid = false;
         if (this.hover) {
             this._clearTimeout('collapse');
             const expandable = this._state === 'media' ||
@@ -2210,6 +2507,9 @@ class Island extends St.Widget {
     }
 
     _onDestroy() {
+        if (this._ghost)
+            global.stage.disconnect(this._ghostCapture);
+        this._ghost = null;
         this._aura?.destroy();
         this._aura = null;
         this._privacy?.destroy();

@@ -37,6 +37,18 @@
       <default>true</default>
       <summary>Briefly expand when the song changes</summary>
     </key>
+    <key name="ghost-mode" type="b">
+      <default>true</default>
+      <summary>While music plays, fade away from the pointer and let clicks through; rest the pointer on it or hold Super to use it</summary>
+    </key>
+    <key name="vinyl" type="b">
+      <default>true</default>
+      <summary>Show the cover as a turning record while music plays</summary>
+    </key>
+    <key name="art-tint" type="b">
+      <default>true</default>
+      <summary>A thin edge in the colour of the cover while music plays</summary>
+    </key>
     <key name="visualizer-enabled" type="b">
       <default>true</default>
       <summary>Music visualizer around the island</summary>

@@ -51,11 +51,15 @@ export default class LinuxIslandPreferences extends ExtensionPreferences {
         settings.bind('visualizer-enabled', visualizer, 'sensitive', Gio.SettingsBindFlags.GET);
         look.add(visualizer);
         look.add(switchRow('glow', 'Cover-colour glow'));
+        look.add(switchRow('vinyl', 'Spinning record', 'The cover turns like a record while music plays'));
+        look.add(switchRow('art-tint', 'Cover-colour edge', 'A thin edge in the colour of the album'));
         page.add(look);
 
         const content = new Adw.PreferencesGroup({title: 'What to show'});
         content.add(switchRow('show-media', 'Now playing', 'Any app that supports MPRIS: browsers, Spotify, VLC, Rhythmbox…'));
         content.add(switchRow('peek-on-track-change', 'Peek at new songs', 'Briefly expand when the track changes'));
+        content.add(switchRow('ghost-mode', 'Ghost mode while playing',
+            'Fades away from the pointer and lets clicks through. Rest the pointer on it or hold Super to use it'));
         content.add(switchRow('show-notifications', 'Notifications'));
         content.add(switchRow('replace-banners', 'Hide GNOME banners',
             'Show notifications only in the island. They still appear in the message list.'));

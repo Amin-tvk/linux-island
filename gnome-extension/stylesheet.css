@@ -24,6 +24,10 @@
   color: rgba(255, 255, 255, 0.75);
 }
 .li-cover-btn { border-radius: 1em; }
+.li-record-hole {
+  background-color: #000;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+}
 
 .li-mini-title { font-size: 0.96em; font-weight: 600; }
 .li-mini-phone { spacing: 0.25em; }
