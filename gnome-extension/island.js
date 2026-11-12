@@ -45,7 +45,6 @@ const SHRINK_TIME = 230;
 const PEEK_TIME = 2800;
 const OSD_TIME = 1500;
 const EVENT_TIME = 3000;
-const PHONE_PEEK_MS = 5 * 60 * 1000; // quiet battery reminder while connected
 
 const BATTERY_TEXT = {
     charging: 'Charging',
@@ -466,8 +465,6 @@ class Island extends St.Widget {
         this._phoneIcon = this._icon('phone-symbolic', 13, 'li-dim-icon');
         this._phoneLabel = label('', 'li-date');
         this._phoneCharge = this._icon('battery-full-charging-symbolic', 12, 'li-battery-ok');
-        this._phoneSignal = this._icon('network-cellular-signal-good-symbolic', 12, 'li-dim-icon');
-        weather.insert_child_at_index(this._phoneSignal, 0);
         weather.insert_child_at_index(this._phoneCharge, 0);
         weather.insert_child_at_index(this._phoneLabel, 0);
         weather.insert_child_at_index(this._phoneIcon, 0);
@@ -562,16 +559,14 @@ class Island extends St.Widget {
             this._weatherLabel.text = this._x.weather.text;
             this._weatherIcon.icon_name = this._x.weather.iconName;
         }
-        const phone = this._settings.get_boolean('show-phone') ? this._phoneStatus() : null;
+        const phone = this._phoneToShow();
         this._phoneIcon.visible = this._phoneLabel.visible = !!phone;
         this._phoneCharge.visible = !!phone?.charging;
-        this._phoneSignal.visible = !!phone?.signalIcon;
-        if (phone) {
+        if (phone)
             this._phoneLabel.text = `${phone.percent}%`;
-            if (phone.signalIcon)
-                this._phoneSignal.icon_name = phone.signalIcon;
-        }
-        this._phoneSignal.style = showWeather ? `margin-right: ${this._px(10)}px;` : '';
+        const gap = showWeather ? `margin-right: ${this._px(10)}px;` : '';
+        this._phoneCharge.style = gap;
+        this._phoneLabel.style = phone?.charging ? '' : gap;
         this._weatherBox.visible = !!showWeather || !!phone;
     }
 
@@ -946,7 +941,8 @@ class Island extends St.Widget {
     _connectExtras() {
         const {bluetooth, privacy, clipboard, calendar, weather, focus, stopwatch, pomodoro, alarms} = this._x;
         bluetooth.connectObject('event', (_b, ev) => {
-            if (!this._settings.get_boolean('show-bluetooth'))
+            // The phone reconnects often; it has its own battery alerts.
+            if (!this._settings.get_boolean('show-bluetooth') || ev.iconName === 'phone-symbolic')
                 return;
             const connected = ev.kind === 'bt-connected';
             this._showEvent({
@@ -1022,66 +1018,24 @@ class Island extends St.Widget {
                 this._onPhoneStatusChanged();
                 this._checkPhoneBattery();
             },
-            'connected', (_w, {name, level}) => this._showPhoneEvent({
-                iconName: 'phone-symbolic',
-                title: name,
-                value: level >= 0 ? `${level}%` : 'Connected',
-                valueClass: 'li-battery-ok',
-            }),
-            'disconnected', (_w, {name}) => this._showPhoneEvent({
-                iconName: 'smartphone-symbolic',
-                title: name,
-                value: 'Disconnected',
-            }),
             'charging', (_w, {name, level}) => this._showPhoneEvent({
                 iconName: 'battery-good-charging-symbolic',
                 title: `${name} charging`,
                 value: `${level}%`,
                 valueClass: 'li-battery-ok',
                 iconClass: 'li-battery-ok',
-            }),
-            'discharging', (_w, {name, level}) => this._showPhoneEvent({
-                iconName: 'battery-good-symbolic',
-                title: `${name} on battery`,
-                value: `${level}%`,
             }), this);
         this._x.phoneBattery.connectObject('changed', () => {
             this._onPhoneStatusChanged();
             this._checkPhoneBattery();
         }, this);
         this._phoneWarned = new Set();
-        // Quiet status peek while connected — not on every battery tick.
-        this._setTimeout('phone-peek', PHONE_PEEK_MS, () => {
-            this._peekPhoneBattery();
-            return GLib.SOURCE_CONTINUE;
-        });
     }
 
     _showPhoneEvent(ev) {
         if (!this._settings.get_boolean('show-phone'))
             return;
         this._showEvent(ev);
-    }
-
-    // Occasional reminder of the phone's charge while it stays connected.
-    _peekPhoneBattery() {
-        if (!this._settings.get_boolean('show-phone'))
-            return;
-        const phone = this._phoneStatus();
-        if (!phone || phone.percent < 0)
-            return;
-        // Skip while a more important view is up.
-        if (this._state === 'call' || this._state === 'notification' || this._state === 'notification-open')
-            return;
-        const title = phone.charging ? `${phone.name} charging` : phone.name;
-        this._showEvent({
-            iconName: phone.charging ? 'battery-good-charging-symbolic' : 'phone-symbolic',
-            title,
-            value: `${phone.percent}%`,
-            valueClass: phone.percent <= 20 && !phone.charging ? 'li-battery-low'
-                : phone.charging ? 'li-battery-ok' : '',
-            iconClass: phone.charging ? 'li-battery-ok' : '',
-        });
     }
 
     // The phone's battery from GSConnect (knows charging) or Bluetooth.
@@ -1091,6 +1045,15 @@ class Island extends St.Widget {
             return {name: gsc.name, percent: gsc.level, charging: gsc.charging, signalIcon: gsc.signalIcon};
         const bt = this._x.phoneBattery.phones[0];
         return bt ? {name: bt.model, percent: bt.percent, charging: false, signalIcon: null} : null;
+    }
+
+    // The phone is shown only when it needs attention: low or charging.
+    _phoneToShow() {
+        if (!this._settings.get_boolean('show-phone'))
+            return null;
+        const phone = this._phoneStatus();
+        const low = Math.max(this._settings.get_int('phone-battery-warning'), 20);
+        return phone && (phone.charging || phone.percent <= low) ? phone : null;
     }
 
     _onPhoneStatusChanged() {
@@ -1104,8 +1067,7 @@ class Island extends St.Widget {
     _syncMediaPhone() {
         if (!this._miniPhone)
             return;
-        const show = this._settings.get_boolean('show-phone');
-        const phone = show ? this._phoneStatus() : null;
+        const phone = this._phoneToShow();
         this._miniPhone.visible = !!phone;
         if (!phone)
             return;
